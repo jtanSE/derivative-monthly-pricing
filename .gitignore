@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
+
+# Real month-end data must never be committed.
+# Sanitized test fixtures are allowed explicitly below.
+data/*/
+!data/templates/
+
+# Raw broker statements dropped in the repo root (real counterparty data).
+# The only Excel fixture allowed in the repo is the sanitized ALIC test file.
+/*.xls
+/*.xlsx
+!/ALIC MTM Prices for Call Options Test - 31 March 2026.xls
+
+# Excel lock files
+~$*.xls
+~$*.xlsx
