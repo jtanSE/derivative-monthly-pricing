@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import datetime as dt
 from enum import Enum
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -71,6 +72,10 @@ class BrokerMark(BaseModel):
     trade_ref: str
     mtm_local: float
     currency: str | None = None
+    # Richer fields a statement provides beyond the minimal contract
+    # (trade/expiry dates, underlying, strike, quantity, put/call, ...).
+    # Used to enrich/validate the canonical record during matching.
+    extra: dict[str, Any] = Field(default_factory=dict)
     lineage: Lineage
 
 

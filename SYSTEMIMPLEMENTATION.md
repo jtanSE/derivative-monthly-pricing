@@ -123,6 +123,7 @@ This is effectively the **normalized output contract for the broker parser layer
 - [ ] Direct cell references (`=Marks!E96`) instead of keyed lookups for BNP/BAML — row-order dependent and fragile; the system must always join on trade ref keys.
 - [ ] VLOOKUP table ranges are inconsistent across sections (`$X$888` vs `$X$611` …) — system uses one unified price table.
 - [ ] Trade reference formats vary by broker: `SWD…`/`EDR…` (Barclays), `OP…` (BNP), `SDB…` (GS), `EUN…` (Nomura), `nnnnn-nnnnn` (JPM), `Sop…` (HSBC), numeric (BAML/MS).
+- [ ] **Manual MTM overrides**: the analyst sometimes replaces a broker mark with a different value (e.g. purchase price for settling trades — Marks sheet note "Used purchase price."). Found in 21 BNP "MCB" trades where the consolidated value matches no column of the raw statement. The system must detect and flag these (broker-statement value vs canonical value divergence) rather than assume the statement is always authoritative. `VERIFIED` (existence) / rule for when overrides are legitimate `TBD`.
 
 ---
 
@@ -234,10 +235,11 @@ One row per trade leg per month-end. `INFERRED` field set — assembled from the
 
 ### Phase 2 — Broker parser layer (one broker at a time, owner-confirmed order `TBD`)
 Parser contract: `parse(file) -> list[BrokerMark]` with `broker, trade_ref, mtm_local, [currency, extra fields]`, plus per-row lineage.
-- [ ] Parser registry + common normalized output model
-- [ ] Sign-convention config per broker (Barclays = flip) — **applied in parser layer, not core**
+- [x] Parser registry + common normalized output model — `parsers/base.py`, `BrokerMark` with `extra` dict for rich fields
+- [x] Sign-convention config per broker (Barclays + Nomura flip) — **applied in parser layer, not core**
+- [x] SUPBOOK-tolerant `.xls` reader for broker files with external-link records — `parsers/xls_compat.py`
 - [ ] Barclays parser + golden-file test
-- [ ] BNP Paribas parser + test
+- [x] BNP Paribas parser + test — `parsers/bnp.py`, 5 tests. Reads sheet `Option - Reg. MM`, MTM from column P "Mark to Market (N*P)"; captures rich fields (dates, underlying, Bloomberg code, strike, qty). 251/272 marks agree with the March Marks sheet to the cent; the 21 "MCB" differences are confirmed analyst manual overrides ("Used purchase price"), to be surfaced by reconciliation. Needs SUPBOOK-tolerant `.xls` open (`parsers/xls_compat.py`).
 - [ ] Morgan Stanley parser + test
 - [ ] Goldman Sachs parser + test
 - [ ] Wells Fargo parser + test
