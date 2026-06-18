@@ -299,6 +299,59 @@ Parser contract: `parse(file) -> list[BrokerMark]` with `broker, trade_ref, mtm_
 
 ---
 
+## 8. Adaptive Parsing for New / Unknown Brokers (design — not yet built)
+
+**Goal.** Parse statements from brokers we have not hand-coded (including
+brand-new counterparties) into the canonical `BrokerMark` shape, without
+writing a fresh Python parser every time.
+
+**Core principle — LLM at onboarding, deterministic at runtime.**
+An LLM is used *once per new format* to propose a column **mapping**, not every
+month to read the data. A human approves the mapping; from then on plain
+deterministic code runs it forever. The LLM never touches a monthly number —
+only the structure, once. This preserves determinism, auditability, and
+reproducibility (the same controls the whole platform requires).
+
+**Representation — hybrid (owner decision).**
+- Most brokers: a **declarative mapping spec** (data, not code: sheet, header
+  anchor, column→field map, sign rules, row filters) executed by one shared,
+  well-tested generic engine. A new broker = a ~15-line form, not a program.
+- Genuinely weird layouts (e.g. the 10-section stacked ALIC sheet): keep the
+  **Python escape hatch** — a hand-written parser registered in
+  `PARSER_REGISTRY`, exactly like `bnp.py` today.
+- Both emit identical `BrokerMark` records, so the rest of the system is
+  agnostic to which was used.
+
+**Sequencing — build examples before abstracting (the "rule of three").**
+Do **not** design the generic engine/spec from a single parser; it would overfit
+to one broker's quirks. Hand-write 3–4 deterministic parsers spanning real
+format diversity first, *then* extract the spec schema from what actually
+varies. Those 3–4 parsers double as the few-shot examples the LLM needs.
+
+- [x] Parser #1 — BNP Paribas (`parsers/bnp.py`)
+- [ ] Parser #2 — BAML
+- [ ] Parser #3 — Goldman Sachs
+- [ ] Parser #4 — HSBC
+- [ ] Extract common vs. varying structure across #1–#4 → define spec schema
+- [ ] Build generic spec-driven engine (covers common cases) + keep Python escape hatch
+- [ ] Convert BNP parser to a spec; prove byte-identical output vs `bnp.py`
+- [ ] LLM mapping-proposer: new file + canonical schema + approved specs (few-shot) → proposed spec
+- [ ] Auto-validation gate: totals reconcile, type checks, re-parse determinism, cross-check overlapping known marks; emit a confidence score
+- [ ] Human review/approval UI: proposed mapping + sample extracted values beside raw cells
+- [ ] Versioned spec store; once approved a broker runs 100% deterministically
+
+**Why few-shot, not fine-tuning.** In-context examples from our approved specs
+are cheaper, simpler, and easier to audit/update than a fine-tuned model.
+Fine-tuning is only a later optimization if volume ever justifies it.
+
+**Controls (institutional).** New-broker mappings are never auto-approved;
+human-in-the-loop is mandatory for first use. The LLM proposes structure only;
+all monetary extraction is deterministic. Lineage is preserved end-to-end. A
+mis-mapped column degrades to a validation failure or a visible review item,
+never a silent bad number.
+
+---
+
 ## 6. Open Questions (blocking items marked ⛔)
 
 | # | Question | Blocks |
