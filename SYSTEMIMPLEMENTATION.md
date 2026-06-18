@@ -124,6 +124,9 @@ This is effectively the **normalized output contract for the broker parser layer
 - [ ] VLOOKUP table ranges are inconsistent across sections (`$X$888` vs `$X$611` …) — system uses one unified price table.
 - [ ] Trade reference formats vary by broker: `SWD…`/`EDR…` (Barclays), `OP…` (BNP), `SDB…` (GS), `EUN…` (Nomura), `nnnnn-nnnnn` (JPM), `Sop…` (HSBC), numeric (BAML/MS).
 - [ ] **Manual MTM overrides**: the analyst sometimes replaces a broker mark with a different value (e.g. purchase price for settling trades — Marks sheet note "Used purchase price."). Found in 21 BNP "MCB" trades where the consolidated value matches no column of the raw statement. The system must detect and flag these (broker-statement value vs canonical value divergence) rather than assume the statement is always authoritative. `VERIFIED` (existence) / rule for when overrides are legitimate `TBD`.
+- [x] **Long/Short share sign**: ALIC stores short positions as **negative shares**; notional and per-unit price follow that sign. Rule verified 251/253 vs ALIC: `shares = +N` for Long, `-N` for Short (broker "Client Direction"; traders DB `LongShort` is authoritative). Applied in `output/call_options_sheet.py`. `VERIFIED`
+- [x] **"MCB" suffix = short legs** of double-legged trades. This one fact explains three earlier puzzles at once: these trades are negative-shares, carry the manual MTM overrides, and are the rows excluded by the positive-only `SUMIFS >0` subtotals (F7). `VERIFIED`
+- [ ] **BNP short-leg-only rows**: 19 "MCB" rows report ref + dates + underlying + price + MTM but leave direction/quantity/strike/put-call blank. Parser captures ref+MTM correctly; notional can't be computed until the traders DB supplies quantity. `VERIFIED`
 
 ---
 
@@ -280,7 +283,8 @@ Parser contract: `parse(file) -> list[BrokerMark]` with `broker, trade_ref, mtm_
 - [ ] Month-over-month consistency checks (trade count drift, stale marks)
 
 ### Phase 7 — Outputs, audit, lineage
-- [ ] `canonical_trades_<YYYYMM>.csv` writer
+- [x] ALIC-style "Call Options" sheet writer (`.xlsx` + `.csv`) — `output/call_options_sheet.py`; demo runner `scripts/build_bnp_preview.py`. Reproduces the analyst's layout and derived columns; BNP output matches ALIC on Notional/Price for 250/272 trades (rest = manual overrides).
+- [ ] `canonical_trades_<YYYYMM>.csv` writer (full canonical schema, post-matching)
 - [ ] Exception report writer
 - [ ] Run manifest: input file hashes, run timestamp, code version, record counts
 - [ ] Value-level lineage (source file/sheet/row for every sourced number)
