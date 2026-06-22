@@ -5,10 +5,13 @@ Workflow (SYSTEMIMPLEMENTATION.md section 8):
   build_prompt(fp, examples)-> few-shot prompt (approved specs as examples)
   propose_spec(...)         -> calls Claude to draft a ParserSpec (needs API key)
   validate_spec(spec, file) -> deterministic quality gate on the drafted spec
+  save_spec(spec)           -> persist an approved spec so the broker is "known"
+  onboard_file(file)        -> end-to-end: known? else draft -> validate -> save
 
 The LLM is used only to DRAFT the spec (structure), once per new format. The
 drafted spec is then reviewed by a human and executed deterministically by
-engine.run_spec every month. The model never reads monthly numbers.
+engine.run_spec every month. The model never reads monthly numbers. A new
+broker becomes permanently known only after save_spec writes its spec to disk.
 """
 
 from __future__ import annotations
@@ -162,3 +165,68 @@ def validate_spec(spec: ParserSpec, path: Path | str) -> ValidationReport:
         pct_with_strike=round(with_strike, 3),
         issues=issues,
     )
+
+
+def _slug(broker_name: str) -> str:
+    return "".join(ch if ch.isalnum() else "_" for ch in broker_name.lower()).strip("_")
+
+
+def save_spec(spec: ParserSpec, filename: str | None = None, specs_dir: Path | None = None) -> Path:
+    """Persist an approved spec into the specs directory, making the broker
+    permanently 'known' to the router. Filename defaults to a slug of the
+    broker name. Refuses to silently overwrite an existing spec."""
+    specs_dir = specs_dir or SPECS_DIR
+    specs_dir.mkdir(parents=True, exist_ok=True)
+    path = specs_dir / (filename or f"{_slug(spec.broker.value)}.json")
+    if path.exists():
+        raise FileExistsError(f"spec already exists: {path.name} (delete/rename to replace)")
+    spec.require()
+    path.write_text(spec.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+@dataclass
+class OnboardResult:
+    status: str  # "already_known" | "proposed" | "saved" | "needs_key" | "rejected"
+    broker: str | None = None
+    spec: ParserSpec | None = None
+    validation: ValidationReport | None = None
+    saved_path: str | None = None
+    message: str = ""
+
+
+def onboard_file(path: Path | str, approve: bool = False) -> OnboardResult:
+    """End-to-end onboarding of a (possibly new) broker statement.
+
+    - Already known -> no-op, reports the matched broker.
+    - Unknown -> draft a spec (needs ANTHROPIC_API_KEY), validate it, and -- only
+      if ``approve=True`` and validation passes -- persist it so the broker
+      becomes known. Without approval the proposed spec is returned for human
+      review but NOT saved (institutional control: no auto-trust).
+    """
+    # local import avoids a circular import (router imports agent)
+    from derivative_pricing.adaptive.router import identify
+
+    matches = identify(path)
+    if matches:
+        return OnboardResult("already_known", broker=matches[0].broker.value,
+                             spec=matches[0], message="A spec already covers this format.")
+
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        return OnboardResult(
+            "needs_key",
+            message="Unknown format. Set ANTHROPIC_API_KEY to auto-draft a spec, "
+                    "or hand-author specs/<broker>.json then re-run.",
+        )
+
+    spec = propose_spec(path)
+    report = validate_spec(spec, path)
+    if not report.ok:
+        return OnboardResult("rejected", broker=spec.broker.value, spec=spec,
+                             validation=report, message=f"Validation failed: {report.issues}")
+    if not approve:
+        return OnboardResult("proposed", broker=spec.broker.value, spec=spec, validation=report,
+                             message="Spec drafted and validated. Review, then onboard with approve=True.")
+    saved = save_spec(spec)
+    return OnboardResult("saved", broker=spec.broker.value, spec=spec, validation=report,
+                         saved_path=str(saved), message=f"Saved {saved.name}; broker now known.")

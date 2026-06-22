@@ -15,7 +15,9 @@ from derivative_pricing.adaptive.agent import (
     SPECS_DIR,
     fingerprint,
     load_spec,
+    onboard_file,
     propose_spec,
+    save_spec,
     validate_spec,
 )
 from derivative_pricing.adaptive.engine import run_spec
@@ -104,3 +106,26 @@ def test_propose_spec_without_key_is_explicit():
         pytest.skip("API key present; skip the no-key guard test")
     with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
         propose_spec("anything.xls")
+
+
+def test_save_spec_roundtrip_and_no_overwrite(tmp_path):
+    spec = load_spec(SPECS_DIR / "gs.json")
+    saved = save_spec(spec, specs_dir=tmp_path)
+    assert saved.exists()
+    assert load_spec(saved).broker == spec.broker
+    # refuses to silently overwrite
+    with pytest.raises(FileExistsError):
+        save_spec(spec, specs_dir=tmp_path)
+
+
+def test_onboard_known_file_is_noop(gs_statement_path):
+    res = onboard_file(gs_statement_path)
+    assert res.status == "already_known"
+    assert res.broker == "Goldman Sachs"
+
+
+def test_onboard_unknown_without_key_asks_for_key(workbook_path):
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        pytest.skip("API key present")
+    res = onboard_file(workbook_path)
+    assert res.status == "needs_key"

@@ -344,9 +344,10 @@ varies. Those 3–4 parsers double as the few-shot examples the LLM needs.
 - [x] **Held-out test — Goldman Sachs**: a GS spec drafted from only the BNP/BAML examples + the GS fingerprint parsed all 310 trades and matched the analyst's Marks sheet **310/310 to the cent**. Strong evidence the approach generalizes.
 - [x] **Held-out test #4 — HSBC** (`adaptive/specs/hsbc.json`): a 4th distinct format — and the first **`.xlsx`**. Forced two real generalizations: a format-agnostic reader (`adaptive/reader.py`, xls+xlsx) and exact-header disambiguation ("MtM" vs "MtM Ccy"/"MtM Less Accrued Interest"). Spec drafted from the prior examples matched the analyst's Marks sheet **18/18 to the cent**.
 - [x] **Format router** (`adaptive/router.py`): `identify()`/`route()`/`route_folder()` recognize a known file by its spec signature (header anchor + optional sheet name) and run it deterministically; unknown files are flagged for the learning agent, ambiguous ones for a human. Verified: all 4 brokers auto-identified; the ALIC workbook correctly flagged unknown.
-- [ ] Wire live `propose_spec` API call + prompt caching once a key is available
+- [x] Spec persistence + onboarding flow (`agent.save_spec`, `agent.onboard_file`): a new broker becomes permanently known once its validated spec is saved to `specs/`. `onboard_file` is the end-to-end path — known → no-op; unknown → draft → validate → (on approval) save. Approval is required before save (no auto-trust); `save_spec` refuses to overwrite.
+- [ ] Wire live `propose_spec` API call + prompt caching once a key is available (the draft step is the only part still needing the key)
 - [ ] Human review/approval UI: proposed mapping + sample extracted values beside raw cells
-- [ ] Versioned spec store + confidence scoring; once approved a broker runs 100% deterministically
+- [ ] Confidence scoring on proposed specs (persistence + approval gate already in place)
 - [x] Removed redundant hand-written `bnp.py`/`baml.py` (specs cover them); escape-hatch mechanism retained via `register_parser`/`PARSER_REGISTRY`
 
 **Why few-shot, not fine-tuning.** In-context examples from our approved specs
