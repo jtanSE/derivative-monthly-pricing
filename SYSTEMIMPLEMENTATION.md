@@ -294,6 +294,8 @@ Parser contract: `parse(file) -> list[BrokerMark]` with `broker, trade_ref, mtm_
 
 ### Phase 7 — Outputs, audit, lineage
 - [x] ALIC-style "Call Options" sheet writer (`.xlsx` + `.csv`) — `output/call_options_sheet.py`. Reproduces the analyst's layout and derived columns; BNP output matches ALIC on Notional/Price for 250/272 trades (rest = manual overrides).
+- [x] **Month-end batch entry point** (`run_month.py`): routes a folder of statements, parses every known broker, writes one combined ALIC-style sheet; flags unknown/ambiguous. Key-free MVP — runs the 4 brokers (676 trades) end-to-end with no API key. CLI: `python -m derivative_pricing.run_month <dir> --as-of YYYY-MM-DD --out <dir>`.
+- [x] **Drag-and-drop UI** (`ui/app.py`, Streamlit): drop a statement → spinner → results (broker, counts, parsed marks, computed output); unknown formats flagged. `uv run --group ui streamlit run ui/app.py`.
 - [ ] `canonical_trades_<YYYYMM>.csv` writer (full canonical schema, post-matching)
 - [ ] Exception report writer
 - [ ] Run manifest: input file hashes, run timestamp, code version, record counts
