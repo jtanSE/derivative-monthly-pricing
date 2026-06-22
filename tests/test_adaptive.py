@@ -64,6 +64,27 @@ def test_gs_spec_matches_marks_sheet(gs_statement_path, workbook_path):
     assert agree == len(common), f"{agree}/{len(common)} agree"
 
 
+def test_engine_reads_xlsx(hsbc_statement_path):
+    """HSBC is .xlsx; the format-agnostic reader must handle it."""
+    spec = load_spec(SPECS_DIR / "hsbc.json")
+    marks = run_spec(spec, hsbc_statement_path)
+    assert len(marks) > 10
+    assert all(m.broker == Broker.HSBC for m in marks)
+
+
+def test_hsbc_spec_matches_marks_sheet(hsbc_statement_path, workbook_path):
+    """Held-out HSBC (.xlsx, 4th distinct format) must reproduce the analyst's
+    HSBC marks exactly."""
+    spec = load_spec(SPECS_DIR / "hsbc.json")
+    parsed = {m.trade_ref: m.mtm_local for m in run_spec(spec, hsbc_statement_path)}
+    sheet = {m.trade_ref: m.mtm_local
+             for m in read_marks_sheet(workbook_path) if m.broker == Broker.HSBC}
+    common = set(parsed) & set(sheet)
+    assert len(common) >= 15
+    agree = sum(1 for r in common if abs(parsed[r] - sheet[r]) <= 0.01)
+    assert agree == len(common), f"{agree}/{len(common)} agree"
+
+
 def test_propose_spec_without_key_is_explicit():
     if os.environ.get("ANTHROPIC_API_KEY"):
         pytest.skip("API key present; skip the no-key guard test")

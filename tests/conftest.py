@@ -7,6 +7,7 @@ TEST_WORKBOOK = REPO_ROOT / "ALIC MTM Prices for Call Options Test - 31 March 20
 BNP_STATEMENT = REPO_ROOT / "BNP AUGUSTAR LIFE INSURANCE COMPANY_01 Apr 2026 (2).xls"
 BAML_STATEMENT = REPO_ROOT / "BAML 03-31-2026_Results_82654.xls"
 GS_STATEMENT = REPO_ROOT / "GS_Ohio National Life Ins Co (EQ)_20260331.xls"
+HSBC_STATEMENT = REPO_ROOT / "HSBC GV_AUGUSTAR LIFE INSURANCE COMPANY REG15_31Mar2026_070407.xlsx"
 
 
 @pytest.fixture(scope="session")
@@ -36,3 +37,10 @@ def gs_statement_path() -> Path:
     if not GS_STATEMENT.exists():
         pytest.skip(f"GS statement not present: {GS_STATEMENT.name}")
     return GS_STATEMENT
+
+
+@pytest.fixture(scope="session")
+def hsbc_statement_path() -> Path:
+    if not HSBC_STATEMENT.exists():
+        pytest.skip(f"HSBC statement not present: {HSBC_STATEMENT.name}")
+    return HSBC_STATEMENT

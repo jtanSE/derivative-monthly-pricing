@@ -1,0 +1,26 @@
+{
+  "broker": "HSBC",
+  "sheet_name": "Valuations",
+  "header_anchor": "FOS TRADE ID",
+  "mtm_sign": 1,
+  "repeated_headers": false,
+  "banner_prefixes": [],
+  "columns": [
+    {"field": "trade_ref", "header_contains": "FOS TRADE ID", "kind": "text"},
+    {"field": "mtm_local", "header_contains": "MtM", "kind": "number"},
+    {"field": "currency", "header_contains": "MtM Ccy", "kind": "text"},
+    {"field": "product_name", "header_contains": "Product Name", "kind": "text"},
+    {"field": "trade_date", "header_contains": "Trade date", "kind": "date"},
+    {"field": "expiry", "header_contains": "Maturity or Expiry date", "kind": "date"},
+    {"field": "underlying", "header_contains": "Underlying", "kind": "text"},
+    {"field": "underlying_price", "header_contains": "Spot Rate", "kind": "number"},
+    {"field": "put_call", "header_contains": "PutCall", "kind": "text"},
+    {"field": "quantity", "header_contains": "Number of Shares", "kind": "number"},
+    {"field": "strike", "header_contains": "Strike Price", "kind": "number"}
+  ],
+  "direction": {
+    "mode": "column",
+    "header_contains": "BuySell",
+    "short_values": ["short", "sell", "s"]
+  }
+}

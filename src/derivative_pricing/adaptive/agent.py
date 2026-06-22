@@ -18,11 +18,9 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import xlrd
-
 from derivative_pricing.adaptive.engine import run_spec
+from derivative_pricing.adaptive.reader import Grid, load_grid
 from derivative_pricing.adaptive.spec import ParserSpec
-from derivative_pricing.parsers.xls_compat import open_workbook
 
 SPECS_DIR = Path(__file__).parent / "specs"
 
@@ -49,30 +47,19 @@ class Fingerprint:
         return json.dumps(self.__dict__, indent=2, default=str)
 
 
-def _row_cells(sheet, r, max_c=30) -> list[str]:
-    out = []
-    for c in range(min(sheet.ncols, max_c)):
-        cell = sheet.cell(r, c)
-        if cell.ctype in (xlrd.XL_CELL_EMPTY, xlrd.XL_CELL_BLANK):
-            out.append("")
-        elif cell.ctype == xlrd.XL_CELL_NUMBER:
-            v = cell.value
-            out.append(str(int(v)) if v == int(v) else f"{v:.6g}")
-        else:
-            out.append(" ".join(str(cell.value).split())[:40])
-    return out
+def _row_cells(grid: Grid, r, max_c=30) -> list[str]:
+    return [grid.text(r, c) for c in range(min(grid.ncols, max_c))]
 
 
 def fingerprint(path: Path | str, max_rows: int = 25) -> Fingerprint:
     """Build a structural digest: the first rows of the first sheet, flagging
     likely header rows (rows with many distinct non-empty text cells)."""
     path = Path(path)
-    book = open_workbook(path, formatting_info=False)
-    sheet = book.sheet_by_index(0)
+    grid = load_grid(path)
 
     header_candidates, sample_rows = [], []
-    for r in range(min(sheet.nrows, max_rows)):
-        cells = _row_cells(sheet, r)
+    for r in range(min(grid.nrows, max_rows)):
+        cells = _row_cells(grid, r)
         nonempty = [x for x in cells if x]
         texty = [x for x in nonempty if not x.replace(".", "").replace("-", "").isdigit()]
         # header-ish: many text cells, few pure numbers
@@ -82,8 +69,8 @@ def fingerprint(path: Path | str, max_rows: int = 25) -> Fingerprint:
 
     return Fingerprint(
         file_name=path.name,
-        sheets=book.sheet_names(),
-        chosen_sheet=sheet.name,
+        sheets=[grid.name],
+        chosen_sheet=grid.name,
         header_candidates=header_candidates,
         sample_rows=sample_rows,
     )

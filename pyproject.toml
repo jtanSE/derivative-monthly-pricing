@@ -23,3 +23,6 @@ packages = ["src/derivative_pricing"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+filterwarnings = [
+    "ignore:Workbook contains no default style:UserWarning",
+]
