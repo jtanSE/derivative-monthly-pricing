@@ -1,6 +1,7 @@
+from derivative_pricing.adaptive.agent import SPECS_DIR, load_spec
+from derivative_pricing.adaptive.engine import run_spec
 from derivative_pricing.output import build_rows_from_marks
 from derivative_pricing.output.call_options_sheet import _signed_shares
-from derivative_pricing.parsers.bnp import BnpParser
 from derivative_pricing.schema import Broker, BrokerMark, Lineage
 from derivative_pricing.workbook import read_call_options
 
@@ -46,8 +47,9 @@ def test_matches_alic_after_sign_fix(bnp_statement_path, workbook_path):
     """With the Long/Short sign applied, the system's Notional and Price
     reproduce the analyst's ALIC sheet for all but the manually-overridden
     trades (which also drive the MTM differences)."""
+    marks = run_spec(load_spec(SPECS_DIR / "bnp.json"), bnp_statement_path)
     rows = {r.trade_reference: r
-            for r in build_rows_from_marks(BnpParser().parse(bnp_statement_path), {"USD": 1.0})}
+            for r in build_rows_from_marks(marks, {"USD": 1.0})}
     wb = read_call_options(workbook_path)
     alic = {r.trade_ref: r for r in wb.rows if r.broker == Broker.BNP_PARIBAS}
     common = set(rows) & set(alic)

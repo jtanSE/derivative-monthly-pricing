@@ -2,10 +2,16 @@ from derivative_pricing.parsers.base import (
     apply_sign_convention,
     BROKER_MTM_SIGN,
     PARSER_REGISTRY,
+    register_parser,
 )
 
-# Importing concrete parsers registers them in PARSER_REGISTRY.
-from derivative_pricing.parsers import bnp as _bnp  # noqa: F401
-from derivative_pricing.parsers import baml as _baml  # noqa: F401
+# Broker formats are parsed declaratively via adaptive specs + engine
+# (see derivative_pricing.adaptive). PARSER_REGISTRY / register_parser remain
+# as the escape hatch for genuinely irregular layouts a spec cannot express.
 
-__all__ = ["apply_sign_convention", "BROKER_MTM_SIGN", "PARSER_REGISTRY"]
+__all__ = [
+    "apply_sign_convention",
+    "BROKER_MTM_SIGN",
+    "PARSER_REGISTRY",
+    "register_parser",
+]

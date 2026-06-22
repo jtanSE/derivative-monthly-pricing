@@ -1,8 +1,10 @@
 """Adaptive parsing: generic engine + AI-proposed spec.
 
-Proves (a) the declarative engine reproduces the hand-written BNP/BAML parsers
-exactly, and (b) a spec drafted for a held-out broker (Goldman Sachs) parses
-correctly and matches the analyst's Marks sheet.
+Proves the declarative spec + engine reproduces the analyst's marks for every
+reference broker (BNP/BAML), and that a spec drafted for held-out brokers
+(Goldman Sachs, HSBC) parses correctly and matches the analyst's Marks sheet.
+Correctness is judged against the analyst's own Marks sheet -- no hand-written
+parser is needed as an intermediary.
 """
 
 import os
@@ -17,24 +19,36 @@ from derivative_pricing.adaptive.agent import (
     validate_spec,
 )
 from derivative_pricing.adaptive.engine import run_spec
-from derivative_pricing.parsers.baml import BamlParser
-from derivative_pricing.parsers.bnp import BnpParser
 from derivative_pricing.parsers.marks_sheet import read_marks_sheet
 from derivative_pricing.schema import Broker
 
 
-def _pairs(marks):
-    return {(m.trade_ref, round(m.mtm_local, 2)) for m in marks}
+def _spec_marks(name, path):
+    return run_spec(load_spec(SPECS_DIR / name), path)
 
 
-def test_engine_reproduces_bnp(bnp_statement_path):
-    spec = load_spec(SPECS_DIR / "bnp.json")
-    assert _pairs(run_spec(spec, bnp_statement_path)) == _pairs(BnpParser().parse(bnp_statement_path))
+def test_bnp_spec_matches_marks_sheet(bnp_statement_path, workbook_path):
+    # 251/272 agree to the cent; the rest are known manual analyst overrides.
+    parsed = {m.trade_ref: m.mtm_local for m in _spec_marks("bnp.json", bnp_statement_path)}
+    sheet = {m.trade_ref: m.mtm_local
+             for m in read_marks_sheet(workbook_path) if m.broker == Broker.BNP_PARIBAS}
+    common = set(parsed) & set(sheet)
+    assert len(common) > 200
+    agree = sum(1 for r in common if abs(parsed[r] - sheet[r]) <= 0.01)
+    assert agree / len(common) >= 0.90
 
 
-def test_engine_reproduces_baml(baml_statement_path):
-    spec = load_spec(SPECS_DIR / "baml.json")
-    assert _pairs(run_spec(spec, baml_statement_path)) == _pairs(BamlParser().parse(baml_statement_path))
+def test_baml_spec_matches_marks_sheet(baml_statement_path, workbook_path):
+    # BAML is double-legged: each marks-sheet value must appear as some leg.
+    parsed: dict[str, list[float]] = {}
+    for m in _spec_marks("baml.json", baml_statement_path):
+        parsed.setdefault(m.trade_ref, []).append(m.mtm_local)
+    sheet = [(m.trade_ref, m.mtm_local)
+             for m in read_marks_sheet(workbook_path) if m.broker == Broker.BAML]
+    common = [(ref, v) for ref, v in sheet if ref in parsed]
+    assert len(common) > 30
+    hits = sum(1 for ref, v in common if any(abs(v - leg) <= 0.5 for leg in parsed[ref]))
+    assert hits / len(common) >= 0.90
 
 
 def test_fingerprint_finds_header(gs_statement_path):

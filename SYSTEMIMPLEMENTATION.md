@@ -11,20 +11,30 @@
 
 ---
 
-## Build Status (as of first commit)
+## Build Status
 
-Implemented and tested (23 passing tests, incl. a parallel-run gate that
-recomputes the workbook's own ~1,400 trade rows and matches F1–F5):
+Implemented and tested (39 passing tests):
 
 - `schema.py` — canonical models (Trade, BrokerMark, CanonicalRecord, statuses)
-- `pricing/engine.py` — F1, F2/F4 (Excel ROUND), F5
-- `parsers/base.py` — broker registry + F3 sign conventions (Barclays + Nomura flip)
-- `parsers/marks_sheet.py` — stopgap reader of the consolidated Marks sheet
-- `reference/indices.py`, `reference/market_data.py` — canonicalization + Bloomberg seam
-- `workbook/call_options.py` — analyst-sheet reader for the validation gate
+- `pricing/engine.py` — F1, F2/F4 (Excel ROUND), F5; validated vs the workbook's ~1,400 rows
+- **`adaptive/`** — the parsing system:
+  - `spec.py` + `engine.py` — declarative per-broker specs run by one generic engine
+  - `reader.py` — format-agnostic `.xls`/`.xlsx` reader
+  - `agent.py` — AI proposer (fingerprint → few-shot → spec) + deterministic validation gate
+  - `router.py` — recognizes known files (run deterministically) vs unknown (hand off to agent)
+  - `specs/{bnp,baml,gs,hsbc}.json` — four validated brokers (2 formats, 3 layouts)
+- `parsers/base.py` — `register_parser`/`PARSER_REGISTRY` escape hatch + F3 sign helpers; `xls_compat.py` SUPBOOK-tolerant open; `marks_sheet.py` consolidated-Marks reader (validation)
+- `reference/` — index canonicalization + Bloomberg market-data seam
+- `workbook/call_options.py` — analyst-sheet reader for the parallel-run gate
+- `output/call_options_sheet.py` — ALIC-style `.xlsx`/`.csv` writer
 - `matching/engine.py`, `recon/engine.py` — skeletons with verified F7 totals semantics
 
-Blocked on real (sanitized) files: raw broker statements (Q2), traders DB export (Q1).
+Blocked on real (sanitized) files: more broker statements, traders DB export (Q1).
+
+> Note: MTM sign convention currently lives in two places — `spec.mtm_sign` (engine)
+> and `BROKER_MTM_SIGN`/`apply_sign_convention` (output layer). All current brokers
+> are +1 so they agree; consolidate to one source before adding Barclays/Nomura
+> specs (which flip) to avoid a double-flip.
 
 ---
 
@@ -242,7 +252,7 @@ Parser contract: `parse(file) -> list[BrokerMark]` with `broker, trade_ref, mtm_
 - [x] Sign-convention config per broker (Barclays + Nomura flip) — **applied in parser layer, not core**
 - [x] SUPBOOK-tolerant `.xls` reader for broker files with external-link records — `parsers/xls_compat.py`
 - [ ] Barclays parser + golden-file test
-- [x] BNP Paribas parser + test — `parsers/bnp.py`, 5 tests. Reads sheet `Option - Reg. MM`, MTM from column P "Mark to Market (N*P)"; captures rich fields (dates, underlying, Bloomberg code, strike, qty). 251/272 marks agree with the March Marks sheet to the cent; the 21 "MCB" differences are confirmed analyst manual overrides ("Used purchase price"), to be surfaced by reconciliation. Needs SUPBOOK-tolerant `.xls` open (`parsers/xls_compat.py`).
+- [x] BNP Paribas parsing — now via `adaptive/specs/bnp.json` + engine (the hand-written `parsers/bnp.py` was removed once the spec reproduced it byte-identical). Reads sheet `Option - Reg. MM`, MTM from column P "Mark to Market (N*P)"; captures rich fields (dates, underlying, Bloomberg code, strike, qty). 251/272 marks agree with the March Marks sheet to the cent; the 21 "MCB" differences are confirmed analyst manual overrides ("Used purchase price"), to be surfaced by reconciliation. Needs SUPBOOK-tolerant `.xls` open (`parsers/xls_compat.py`).
 - [ ] Morgan Stanley parser + test
 - [ ] Goldman Sachs parser + test
 - [ ] Wells Fargo parser + test
@@ -283,7 +293,7 @@ Parser contract: `parse(file) -> list[BrokerMark]` with `broker, trade_ref, mtm_
 - [ ] Month-over-month consistency checks (trade count drift, stale marks)
 
 ### Phase 7 — Outputs, audit, lineage
-- [x] ALIC-style "Call Options" sheet writer (`.xlsx` + `.csv`) — `output/call_options_sheet.py`; demo runner `scripts/build_bnp_preview.py`. Reproduces the analyst's layout and derived columns; BNP output matches ALIC on Notional/Price for 250/272 trades (rest = manual overrides).
+- [x] ALIC-style "Call Options" sheet writer (`.xlsx` + `.csv`) — `output/call_options_sheet.py`. Reproduces the analyst's layout and derived columns; BNP output matches ALIC on Notional/Price for 250/272 trades (rest = manual overrides).
 - [ ] `canonical_trades_<YYYYMM>.csv` writer (full canonical schema, post-matching)
 - [ ] Exception report writer
 - [ ] Run manifest: input file hashes, run timestamp, code version, record counts
@@ -317,8 +327,8 @@ reproducibility (the same controls the whole platform requires).
   anchor, column→field map, sign rules, row filters) executed by one shared,
   well-tested generic engine. A new broker = a ~15-line form, not a program.
 - Genuinely weird layouts (e.g. the 10-section stacked ALIC sheet): keep the
-  **Python escape hatch** — a hand-written parser registered in
-  `PARSER_REGISTRY`, exactly like `bnp.py` today.
+  **Python escape hatch** — a hand-written parser registered via
+  `parsers.register_parser` into `PARSER_REGISTRY`.
 - Both emit identical `BrokerMark` records, so the rest of the system is
   agnostic to which was used.
 
@@ -328,10 +338,8 @@ to one broker's quirks. Hand-write 3–4 deterministic parsers spanning real
 format diversity first, *then* extract the spec schema from what actually
 varies. Those 3–4 parsers double as the few-shot examples the LLM needs.
 
-- [x] Parser #1 — BNP Paribas (`parsers/bnp.py`)
-- [x] Parser #2 — BAML (`parsers/baml.py`)
-- [x] Spec schema + generic engine (`adaptive/spec.py`, `adaptive/engine.py`) — built early as an experiment; covers all three reference formats
-- [x] BNP + BAML expressed as specs (`adaptive/specs/*.json`); engine reproduces both hand-written parsers **byte-identical** (278/278, 70/70)
+- [x] Reference formats #1 BNP + #2 BAML — first hand-written to learn the variety, then expressed as specs (`adaptive/specs/{bnp,baml}.json`); the engine reproduced both byte-identical, after which the hand-written parsers were removed (now spec-only).
+- [x] Spec schema + generic engine (`adaptive/spec.py`, `adaptive/engine.py`) — covers all reference formats; correctness checked against the analyst's Marks sheet
 - [x] AI mapping-proposer scaffolding (`adaptive/agent.py`): fingerprint → few-shot prompt → spec; deterministic `validate_spec` gate. (Live API call needs `ANTHROPIC_API_KEY`; absent, a human/LLM authors the spec JSON.)
 - [x] **Held-out test — Goldman Sachs**: a GS spec drafted from only the BNP/BAML examples + the GS fingerprint parsed all 310 trades and matched the analyst's Marks sheet **310/310 to the cent**. Strong evidence the approach generalizes.
 - [x] **Held-out test #4 — HSBC** (`adaptive/specs/hsbc.json`): a 4th distinct format — and the first **`.xlsx`**. Forced two real generalizations: a format-agnostic reader (`adaptive/reader.py`, xls+xlsx) and exact-header disambiguation ("MtM" vs "MtM Ccy"/"MtM Less Accrued Interest"). Spec drafted from the prior examples matched the analyst's Marks sheet **18/18 to the cent**.
@@ -339,7 +347,7 @@ varies. Those 3–4 parsers double as the few-shot examples the LLM needs.
 - [ ] Wire live `propose_spec` API call + prompt caching once a key is available
 - [ ] Human review/approval UI: proposed mapping + sample extracted values beside raw cells
 - [ ] Versioned spec store + confidence scoring; once approved a broker runs 100% deterministically
-- [ ] Retire/relegate hand-written `bnp.py`/`baml.py` to escape-hatch status (specs now cover them)
+- [x] Removed redundant hand-written `bnp.py`/`baml.py` (specs cover them); escape-hatch mechanism retained via `register_parser`/`PARSER_REGISTRY`
 
 **Why few-shot, not fine-tuning.** In-context examples from our approved specs
 are cheaper, simpler, and easier to audit/update than a fine-tuned model.
