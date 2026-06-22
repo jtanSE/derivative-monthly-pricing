@@ -24,6 +24,8 @@ from derivative_pricing.adaptive.router import route
 from derivative_pricing.output import build_rows_from_marks, write_call_options_sectioned_xlsx
 from derivative_pricing.recon import section_totals
 
+REPO = Path(__file__).resolve().parents[1]
+
 st.set_page_config(page_title="Derivative MTM Parser", page_icon="📄", layout="wide")
 st.title("📄 Broker Statement Parser")
 st.caption("Known formats parse instantly; new ones are flagged for onboarding. "
@@ -95,38 +97,52 @@ with single_tab:
 
 # ----------------------------------------------------------------------------
 with month_tab:
-    st.markdown("**Drop all your broker files** to build the combined ALIC-shaped sheet.")
     as_of = st.text_input("Month-end date", value="2026-03-31")
-    files = st.file_uploader("Drop broker statements", type=["xls", "xlsx"],
+    st.markdown("Showing the combined ALIC sheet built from the broker files already "
+                "in the project folder. You can also drop additional files below.")
+
+    extra = st.file_uploader("Add more broker statements (optional)", type=["xls", "xlsx"],
                              accept_multiple_files=True, key="month")
 
-    if not files:
-        st.info("Waiting for files…")
-        st.stop()
+    # Sources: files already in the repo folder + any uploaded now.
+    repo_files = sorted(p for p in REPO.glob("*.xls") if " - Copy" not in p.name)
+    repo_files += sorted(REPO.glob("*.xlsx"))
+    sources = [("repo", p) for p in repo_files] + \
+              [("upload", _save_temp(f), f.name) for f in (extra or [])]
 
-    all_marks, known, unknown, ambiguous = [], [], [], []
-    with st.spinner(f"Parsing {len(files)} files …"):
-        for f in files:
+    all_marks, loaded, unknown, dupes = [], [], [], []
+    seen_brokers: set[str] = set()
+    with st.spinner(f"Parsing {len(sources)} files …"):
+        for src in sources:
+            path = src[1]
+            display = src[2] if len(src) > 2 else path.name
             try:
-                r = route(_save_temp(f))
+                r = route(path)
             except Exception as e:  # noqa: BLE001
-                unknown.append(f"{f.name} (error: {e})")
+                unknown.append(f"{display} (error: {e})")
                 continue
-            if r.status == "known":
-                known.append((r.broker, len(r.marks)))
-                all_marks.extend(r.marks)
-            elif r.status == "ambiguous":
-                ambiguous.append(f"{f.name} → {', '.join(r.candidates)}")
-            else:
-                unknown.append(f.name)
+            if r.status != "known":
+                if r.status == "unknown":
+                    unknown.append(display)
+                continue
+            if r.broker in seen_brokers:
+                dupes.append(f"{display} ({r.broker})")
+                continue
+            seen_brokers.add(r.broker)
+            loaded.append((r.broker, len(r.marks), display))
+            all_marks.extend(r.marks)
 
-    if known:
-        st.success(f"Parsed {len(known)} known brokers — {len(all_marks)} trades total.")
-    if unknown:
-        st.warning("Unrecognized (would be onboarded): " + ", ".join(unknown))
-    if ambiguous:
-        st.warning("Ambiguous: " + ", ".join(ambiguous))
+    if loaded:
+        st.success(f"Loaded {len(loaded)} brokers — {len(all_marks)} trades.")
+        with st.expander("Files loaded"):
+            for broker, n, name in loaded:
+                st.write(f"• **{broker}** — {n} trades  ·  `{name}`")
+            if dupes:
+                st.write("Skipped (broker already loaded): " + ", ".join(dupes))
+            if unknown:
+                st.write("Skipped (unrecognized / not a statement): " + ", ".join(unknown))
     if not all_marks:
+        st.info("No recognized broker statements found in the project folder.")
         st.stop()
 
     rows = build_rows_from_marks(all_marks, fx_rates={"USD": 1.0})
