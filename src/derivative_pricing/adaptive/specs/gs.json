@@ -1,0 +1,26 @@
+{
+  "broker": "Goldman Sachs",
+  "sheet_name": null,
+  "header_anchor": "GS Ref",
+  "mtm_sign": 1,
+  "repeated_headers": false,
+  "banner_prefixes": [],
+  "columns": [
+    {"field": "trade_ref", "header_contains": "GS Ref", "kind": "text"},
+    {"field": "mtm_local", "header_contains": "NPV Local", "kind": "number"},
+    {"field": "currency", "header_contains": "Ccy", "kind": "text"},
+    {"field": "instrument_type", "header_contains": "Product Type", "kind": "text"},
+    {"field": "trade_date", "header_contains": "Trade Date", "kind": "date"},
+    {"field": "expiry", "header_contains": "Maturity Date", "kind": "date"},
+    {"field": "underlying", "header_contains": "Underlyer Symbol", "kind": "text"},
+    {"field": "underlying_price", "header_contains": "Underlyer Price", "kind": "number"},
+    {"field": "put_call", "header_contains": "Put Indicator", "kind": "text"},
+    {"field": "quantity", "header_contains": "Quantity", "kind": "number"},
+    {"field": "strike", "header_contains": "Strike", "kind": "number"}
+  ],
+  "direction": {
+    "mode": "column",
+    "header_contains": "B/ S",
+    "short_values": ["short", "sell", "s"]
+  }
+}

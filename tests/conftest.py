@@ -6,6 +6,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 TEST_WORKBOOK = REPO_ROOT / "ALIC MTM Prices for Call Options Test - 31 March 2026.xls"
 BNP_STATEMENT = REPO_ROOT / "BNP AUGUSTAR LIFE INSURANCE COMPANY_01 Apr 2026 (2).xls"
 BAML_STATEMENT = REPO_ROOT / "BAML 03-31-2026_Results_82654.xls"
+GS_STATEMENT = REPO_ROOT / "GS_Ohio National Life Ins Co (EQ)_20260331.xls"
 
 
 @pytest.fixture(scope="session")
@@ -28,3 +29,10 @@ def baml_statement_path() -> Path:
     if not BAML_STATEMENT.exists():
         pytest.skip(f"BAML statement not present: {BAML_STATEMENT.name}")
     return BAML_STATEMENT
+
+
+@pytest.fixture(scope="session")
+def gs_statement_path() -> Path:
+    if not GS_STATEMENT.exists():
+        pytest.skip(f"GS statement not present: {GS_STATEMENT.name}")
+    return GS_STATEMENT

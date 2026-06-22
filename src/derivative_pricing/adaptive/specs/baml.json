@@ -1,0 +1,27 @@
+{
+  "broker": "BAML",
+  "sheet_name": "ValAppReport_Default",
+  "header_anchor": "ML Ref.",
+  "mtm_sign": 1,
+  "repeated_headers": true,
+  "banner_prefixes": ["deal"],
+  "columns": [
+    {"field": "trade_ref", "header_contains": "ML Ref.", "kind": "text"},
+    {"field": "mtm_local", "header_contains": "Estimated mid-market value", "kind": "number"},
+    {"field": "mid_price", "header_contains": "Estimated mid-market price", "kind": "number"},
+    {"field": "currency", "header_contains": "Sett. Cur.", "kind": "text"},
+    {"field": "instrument_type", "header_contains": "Instrument Type", "kind": "text"},
+    {"field": "trade_date", "header_contains": "Trade Date", "kind": "date"},
+    {"field": "expiry", "header_contains": "Maturity Date", "kind": "date"},
+    {"field": "underlying", "header_contains": "Underlying Name", "kind": "text"},
+    {"field": "underlying_price", "header_contains": "Underlying Reference Price", "kind": "number"},
+    {"field": "put_call", "header_contains": "Call/Put", "kind": "text"},
+    {"field": "strike", "header_contains": "Strike", "kind": "number"},
+    {"field": "quantity", "header_contains": "Position", "kind": "number"},
+    {"field": "multiplier", "header_contains": "Multiplier", "kind": "number"}
+  ],
+  "direction": {
+    "mode": "sign_of",
+    "sign_of_field": "quantity"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "broker": "BNP Paribas",
+  "sheet_name": "Option - Reg. MM",
+  "header_anchor": "BNPP's ref",
+  "mtm_sign": 1,
+  "repeated_headers": false,
+  "banner_prefixes": [],
+  "columns": [
+    {"field": "trade_ref", "header_contains": "BNPP's ref", "kind": "text"},
+    {"field": "mtm_local", "header_contains": "Mark to Market (N*P)", "kind": "number"},
+    {"field": "currency", "header_contains": "Currency", "kind": "text"},
+    {"field": "trade_date", "header_contains": "Trade Date", "kind": "date"},
+    {"field": "expiry", "header_contains": "Expiration date", "kind": "date"},
+    {"field": "underlying", "header_contains": "Underlying", "kind": "text"},
+    {"field": "bloomberg_code", "header_contains": "Bloom Code", "kind": "text"},
+    {"field": "underlying_price", "header_contains": "Underlying price", "kind": "number"},
+    {"field": "put_call", "header_contains": "Call/ Put", "kind": "text"},
+    {"field": "quantity", "header_contains": "Number of options (N)", "kind": "number"},
+    {"field": "strike", "header_contains": "Strike", "kind": "number"}
+  ],
+  "direction": {
+    "mode": "column",
+    "header_contains": "Client Direction",
+    "short_values": ["short", "sell", "s"]
+  }
+}

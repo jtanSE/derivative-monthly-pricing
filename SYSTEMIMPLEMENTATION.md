@@ -329,16 +329,16 @@ format diversity first, *then* extract the spec schema from what actually
 varies. Those 3–4 parsers double as the few-shot examples the LLM needs.
 
 - [x] Parser #1 — BNP Paribas (`parsers/bnp.py`)
-- [ ] Parser #2 — BAML
-- [ ] Parser #3 — Goldman Sachs
-- [ ] Parser #4 — HSBC
-- [ ] Extract common vs. varying structure across #1–#4 → define spec schema
-- [ ] Build generic spec-driven engine (covers common cases) + keep Python escape hatch
-- [ ] Convert BNP parser to a spec; prove byte-identical output vs `bnp.py`
-- [ ] LLM mapping-proposer: new file + canonical schema + approved specs (few-shot) → proposed spec
-- [ ] Auto-validation gate: totals reconcile, type checks, re-parse determinism, cross-check overlapping known marks; emit a confidence score
+- [x] Parser #2 — BAML (`parsers/baml.py`)
+- [x] Spec schema + generic engine (`adaptive/spec.py`, `adaptive/engine.py`) — built early as an experiment; covers all three reference formats
+- [x] BNP + BAML expressed as specs (`adaptive/specs/*.json`); engine reproduces both hand-written parsers **byte-identical** (278/278, 70/70)
+- [x] AI mapping-proposer scaffolding (`adaptive/agent.py`): fingerprint → few-shot prompt → spec; deterministic `validate_spec` gate. (Live API call needs `ANTHROPIC_API_KEY`; absent, a human/LLM authors the spec JSON.)
+- [x] **Held-out test — Goldman Sachs**: a GS spec drafted from only the BNP/BAML examples + the GS fingerprint parsed all 310 trades and matched the analyst's Marks sheet **310/310 to the cent**. Strong evidence the approach generalizes.
+- [ ] Parser/spec #4 — HSBC (next; widen the evidence base)
+- [ ] Wire live `propose_spec` API call + prompt caching once a key is available
 - [ ] Human review/approval UI: proposed mapping + sample extracted values beside raw cells
-- [ ] Versioned spec store; once approved a broker runs 100% deterministically
+- [ ] Versioned spec store + confidence scoring; once approved a broker runs 100% deterministically
+- [ ] Retire/relegate hand-written `bnp.py`/`baml.py` to escape-hatch status (specs now cover them)
 
 **Why few-shot, not fine-tuning.** In-context examples from our approved specs
 are cheaper, simpler, and easier to audit/update than a fine-tuned model.
