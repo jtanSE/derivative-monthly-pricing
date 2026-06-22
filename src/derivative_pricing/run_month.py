@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from derivative_pricing.adaptive.router import route_folder
-from derivative_pricing.output import build_rows_from_marks, write_call_options_xlsx
+from derivative_pricing.output import build_rows_from_marks, write_call_options_sectioned_xlsx
 from derivative_pricing.output.call_options_sheet import COLUMNS
 
 
@@ -61,9 +61,11 @@ def run_month(
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
 
-    xlsx = write_call_options_xlsx(
-        rows, out / f"call_options_{as_of}.xlsx", as_of=as_of, broker_label="All brokers"
+    # ALIC-shaped sheet: per-broker sections + subtotals + grand total
+    xlsx = write_call_options_sectioned_xlsx(
+        rows, out / f"call_options_{as_of}.xlsx", as_of=as_of
     )
+    # flat CSV: one row per trade, for downstream/machine use
     csv_path = out / f"call_options_{as_of}.csv"
     with open(csv_path, "w", newline="", encoding="utf-8") as fh:
         w = _csv.writer(fh)

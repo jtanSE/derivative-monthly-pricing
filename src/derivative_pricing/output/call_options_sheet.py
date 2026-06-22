@@ -43,6 +43,7 @@ class CallOptionsOutputRow:
     mtm_usd: float | None
     shares: float | None
     price_local: float | None
+    broker: str | None = None  # for ALIC-style per-broker sectioning
 
     def as_cells(self) -> list:
         return [
@@ -119,6 +120,7 @@ def build_rows_from_marks(
                 mtm_usd=mtm_usd,
                 shares=shares,
                 price_local=price,
+                broker=m.broker.value,
             )
         )
     return rows
@@ -161,6 +163,96 @@ def write_call_options_xlsx(
     # widen columns a little
     for c in range(1, len(COLUMNS) + 1):
         ws.column_dimensions[chr(64 + c)].width = 16
+
+    wb.save(path)
+    return path
+
+
+# Banner text per broker, matching the analyst's section headers.
+_BANNER = {"Barclays": "Barclays Custom"}
+
+
+def _subtotal_cells(rows: list[CallOptionsOutputRow], label: str) -> list:
+    """A subtotal/total row replicating the workbook's F7 semantics: notional
+    and shares are POSITIVE-ONLY sums (short legs excluded); MTM is a plain sum.
+    Per-unit price is left blank (not meaningful at the aggregate)."""
+    def pos(vals):
+        return sum(v for v in vals if v is not None and v > 0)
+
+    def tot(vals):
+        return sum(v for v in vals if v is not None)
+
+    return [
+        label, None, None, None, None, None,
+        pos(r.notional_local for r in rows),
+        pos(r.notional_usd for r in rows),
+        tot(r.mtm_local for r in rows),
+        tot(r.mtm_usd for r in rows),
+        pos(r.shares for r in rows),
+        None,
+    ]
+
+
+def write_call_options_sectioned_xlsx(
+    rows: list[CallOptionsOutputRow], path: Path | str, *, as_of: str
+) -> Path:
+    """Write an ALIC-shaped Call Options sheet: one section per broker (banner
+    -> header -> trades -> positive-only subtotal), then a grand total.
+
+    Mirrors the analyst's actual layout (section banners + F7 subtotals + F8
+    grand total) rather than a flat table.
+    """
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font
+
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Call Options"
+    bold = Font(bold=True)
+
+    # group rows by broker, preserving first-seen order
+    groups: dict[str, list[CallOptionsOutputRow]] = {}
+    for r in rows:
+        groups.setdefault(r.broker or "Unknown", []).append(r)
+
+    r_idx = 1
+    section_subtotals: list[list] = []
+    for broker, broker_rows in groups.items():
+        banner = _BANNER.get(broker, broker)
+        ws.cell(row=r_idx, column=1, value=banner).font = bold
+        ws.cell(row=r_idx + 1, column=1, value="Equity Derivatives - ALIC Call Options")
+        ws.cell(row=r_idx + 2, column=1, value=as_of)
+        header_r = r_idx + 3
+        for c, name in enumerate(COLUMNS, start=1):
+            ws.cell(row=header_r, column=c, value=name).font = bold
+        rr = header_r + 1
+        for row in broker_rows:
+            for c, val in enumerate(row.as_cells(), start=1):
+                ws.cell(row=rr, column=c, value=val)
+            rr += 1
+        sub = _subtotal_cells(broker_rows, f"{broker} subtotal")
+        for c, val in enumerate(sub, start=1):
+            cell = ws.cell(row=rr, column=c, value=val)
+            cell.font = bold
+        section_subtotals.append(sub)
+        r_idx = rr + 2  # blank row between sections
+
+    # grand total: sum the section subtotals (positive-only fields stay
+    # positive-only because the subtotals already are; MTM sums the sums)
+    def col_sum(i):
+        return sum(s[i] for s in section_subtotals if isinstance(s[i], (int, float)))
+
+    grand = ["GRAND TOTAL", None, None, None, None, None,
+             col_sum(6), col_sum(7), col_sum(8), col_sum(9), col_sum(10), None]
+    for c, val in enumerate(grand, start=1):
+        ws.cell(row=r_idx, column=c, value=val).font = bold
+
+    for c in range(1, len(COLUMNS) + 1):
+        ws.column_dimensions[chr(64 + c)].width = 16
+    ws.cell(row=1, column=1).alignment = Alignment(horizontal="left")
 
     wb.save(path)
     return path

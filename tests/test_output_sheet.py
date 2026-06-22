@@ -1,6 +1,6 @@
 from derivative_pricing.adaptive.agent import SPECS_DIR, load_spec
 from derivative_pricing.adaptive.engine import run_spec
-from derivative_pricing.output import build_rows_from_marks
+from derivative_pricing.output import build_rows_from_marks, write_call_options_sectioned_xlsx
 from derivative_pricing.output.call_options_sheet import _signed_shares
 from derivative_pricing.schema import Broker, BrokerMark, Lineage
 from derivative_pricing.workbook import read_call_options
@@ -41,6 +41,30 @@ def test_long_position_positive():
         [_mark("L1", 10.0, "Long", 6500.0)], fx_rates={"USD": 1.0}
     )
     assert rows[0].notional_local == 65000.0
+
+
+def test_sectioned_output_has_banners_subtotals_grandtotal(tmp_path):
+    import openpyxl
+
+    marks = [
+        _mark("B1", 10.0, "Long", 100.0, mtm=500.0),
+        _mark("B2", 5.0, "Short", 100.0, mtm=-200.0),  # short -> negative notional
+    ]
+    marks[1].broker = Broker.HSBC  # force a second section
+    rows = build_rows_from_marks(marks, fx_rates={"USD": 1.0})
+    out = write_call_options_sectioned_xlsx(rows, tmp_path / "alic.xlsx", as_of="2026-03-31")
+
+    ws = openpyxl.load_workbook(out).active
+    col_a = [ws.cell(row=r, column=1).value for r in range(1, ws.max_row + 1)]
+    text = " ".join(str(x) for x in col_a if x)
+    assert "BNP Paribas" in text and "HSBC" in text          # banners
+    assert "subtotal" in text.lower()                         # F7 subtotal rows
+    assert "GRAND TOTAL" in text                              # F8 grand total
+
+    # F7: notional subtotal is positive-only (short leg excluded)
+    sub_row = next(r for r in range(1, ws.max_row + 1)
+                   if str(ws.cell(row=r, column=1).value or "").endswith("subtotal"))
+    assert ws.cell(row=sub_row, column=7).value == 1000.0  # only the long leg's notional
 
 
 def test_matches_alic_after_sign_fix(bnp_statement_path, workbook_path):
