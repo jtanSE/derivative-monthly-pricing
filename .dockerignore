@@ -1,0 +1,13 @@
+# Never bake real broker / counterparty data into the image.
+*.xls
+*.xlsx
+data/
+
+# Dev/test/build artifacts not needed at runtime.
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.git/
+tests/
+*.md

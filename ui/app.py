@@ -12,6 +12,7 @@ The actual files are parsed via the router -- never screenshots.
 
 from __future__ import annotations
 
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -25,6 +26,11 @@ from derivative_pricing.output import build_rows_from_marks, write_call_options_
 from derivative_pricing.recon import section_totals
 
 REPO = Path(__file__).resolve().parents[1]
+# Where to look for already-present statements. Defaults to the project folder
+# for local dev; in a hosted container set STATEMENTS_DIR to a mounted volume
+# (or leave it empty and rely on the uploader). Real broker data is never baked
+# into the image.
+STATEMENTS_DIR = Path(os.environ.get("STATEMENTS_DIR", str(REPO)))
 
 st.set_page_config(page_title="Derivative MTM Parser", page_icon="📄", layout="wide")
 st.title("📄 Broker Statement Parser")
@@ -98,15 +104,15 @@ with single_tab:
 # ----------------------------------------------------------------------------
 with month_tab:
     as_of = st.text_input("Month-end date", value="2026-03-31")
-    st.markdown("Showing the combined ALIC sheet built from the broker files already "
-                "in the project folder. You can also drop additional files below.")
+    st.markdown("Combined ALIC sheet built from any statements found in the configured "
+                "folder, plus anything you drop below.")
 
-    extra = st.file_uploader("Add more broker statements (optional)", type=["xls", "xlsx"],
+    extra = st.file_uploader("Add broker statements", type=["xls", "xlsx"],
                              accept_multiple_files=True, key="month")
 
-    # Sources: files already in the repo folder + any uploaded now.
-    repo_files = sorted(p for p in REPO.glob("*.xls") if " - Copy" not in p.name)
-    repo_files += sorted(REPO.glob("*.xlsx"))
+    # Sources: files already present in STATEMENTS_DIR + any uploaded now.
+    repo_files = sorted(p for p in STATEMENTS_DIR.glob("*.xls") if " - Copy" not in p.name)
+    repo_files += sorted(STATEMENTS_DIR.glob("*.xlsx"))
     sources = [("repo", p) for p in repo_files] + \
               [("upload", _save_temp(f), f.name) for f in (extra or [])]
 

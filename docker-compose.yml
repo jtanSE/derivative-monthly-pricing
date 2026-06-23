@@ -1,0 +1,19 @@
+services:
+  app:
+    build: .
+    image: derivative-monthly-pricing:latest
+    ports:
+      - "8501:8501"
+    environment:
+      # Optional — enables self-service onboarding of brand-new brokers.
+      # The app works fully without it. Provide via the host environment or a
+      # secrets manager; do NOT hard-code it here.
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # Optional — a folder of statements to pre-load into the combined view.
+      # If you mount a volume below, set this to its container path.
+      - STATEMENTS_DIR=${STATEMENTS_DIR:-}
+    # Optional: mount a host folder of broker statements (read-only) and set
+    # STATEMENTS_DIR=/data/statements to pre-load instead of uploading.
+    # volumes:
+    #   - ./statements:/data/statements:ro
+    restart: unless-stopped
