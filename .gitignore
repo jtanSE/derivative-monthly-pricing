@@ -10,11 +10,10 @@ __pycache__/
 data/*/
 !data/templates/
 
-# Raw broker statements dropped in the repo root (real counterparty data).
-# The only Excel fixture allowed in the repo is the sanitized ALIC test file.
-/*.xls
-/*.xlsx
-!/ALIC MTM Prices for Call Options Test - 31 March 2026.xls
+# No Excel files are ever committed — all broker/company data stays private.
+# Tests read these from the local working tree; they are skipped when absent.
+*.xls
+*.xlsx
 
 # Excel lock files
 ~$*.xls
