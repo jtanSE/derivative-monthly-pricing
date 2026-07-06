@@ -129,7 +129,9 @@ def run_spec(spec: ParserSpec, path: Path | str) -> list[BrokerMark]:
             BrokerMark(
                 broker=spec.broker,
                 trade_ref=ref,
-                mtm_local=spec.mtm_sign * mtm,
+                # AS-REPORTED per the BrokerMark contract; sign conventions are
+                # applied downstream via parsers.base.BROKER_MTM_SIGN.
+                mtm_local=mtm,
                 currency=currency,
                 extra=extra,
                 lineage=Lineage(source_file=path.name, sheet=grid.name, row=r + 1),

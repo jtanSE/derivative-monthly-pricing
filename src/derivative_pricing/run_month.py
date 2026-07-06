@@ -32,6 +32,10 @@ class MonthRunSummary:
     known: list[tuple[str, str, int]] = field(default_factory=list)   # (file, broker, n_marks)
     unknown: list[str] = field(default_factory=list)
     ambiguous: list[tuple[str, list[str]]] = field(default_factory=list)
+    # A second file for a broker already loaded this run. Excluded from totals
+    # (double-counting a broker would silently inflate every control total);
+    # a human decides which file is authoritative.
+    duplicates: list[tuple[str, str]] = field(default_factory=list)  # (file, broker)
     total_marks: int = 0
     output_xlsx: str | None = None
     output_csv: str | None = None
@@ -46,9 +50,14 @@ def run_month(
 ) -> MonthRunSummary:
     summary = MonthRunSummary(as_of=as_of)
     all_marks = []
+    seen_brokers: set[str] = set()
     for r in route_folder(statements_dir):
         name = Path(r.path).name
         if r.status == "known":
+            if r.broker in seen_brokers:
+                summary.duplicates.append((name, r.broker))
+                continue
+            seen_brokers.add(r.broker)
             summary.known.append((name, r.broker, len(r.marks)))
             all_marks.extend(r.marks)
         elif r.status == "ambiguous":
@@ -90,10 +99,14 @@ def _print_summary(s: MonthRunSummary) -> None:
         print(f"\nUnknown formats ({len(s.unknown)}) - need onboarding:")
         for name in s.unknown:
             print(f"  [????] {name}")
+    if s.duplicates:
+        print(f"\nDuplicate broker files ({len(s.duplicates)}) - EXCLUDED from totals, pick one per broker:")
+        for name, broker in s.duplicates:
+            print(f"  [SKIP] {name} ({broker} already loaded)")
     if s.ambiguous:
         print(f"\nAmbiguous ({len(s.ambiguous)}) - need a human:")
         for name, cands in s.ambiguous:
-            print(f"  [DUP]  {name}: matched {', '.join(cands)}")
+            print(f"  [AMBG] {name}: matched {', '.join(cands)}")
     print(f"\nTotal trades: {s.total_marks}")
     print(f"Output: {s.output_xlsx}")
     print(f"        {s.output_csv}")

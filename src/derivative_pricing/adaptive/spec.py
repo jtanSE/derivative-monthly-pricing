@@ -29,6 +29,8 @@ ValueKind = Literal["text", "number", "date"]
 class ColumnRule(BaseModel):
     """How to find one field's column and read its value."""
 
+    model_config = {"extra": "forbid"}  # typo'd directives must fail loudly
+
     field: str  # canonical field name (trade_ref, mtm_local, quantity, ...)
     header_contains: str  # case-insensitive substring of the column header
     kind: ValueKind = "text"
@@ -43,6 +45,8 @@ class DirectionRule(BaseModel):
       - "none": always Long (single-direction statements).
     """
 
+    model_config = {"extra": "forbid"}
+
     mode: Literal["column", "sign_of", "none"] = "none"
     header_contains: str | None = None  # for mode="column"
     short_values: list[str] = Field(default_factory=lambda: ["short", "sell", "s"])
@@ -50,6 +54,13 @@ class DirectionRule(BaseModel):
 
 
 class ParserSpec(BaseModel):
+    # NOTE on signs: specs extract values AS-REPORTED by the broker — a spec
+    # never flips MTM signs. The single source of sign truth is
+    # parsers.base.BROKER_MTM_SIGN (Barclays/Nomura report dealer-perspective),
+    # applied downstream by the output layer. This prevents double-flips.
+
+    model_config = {"extra": "forbid"}  # typo'd directives must fail loudly
+
     broker: Broker
     # Sheet selection: exact name, else first sheet.
     sheet_name: str | None = None
@@ -58,9 +69,6 @@ class ParserSpec(BaseModel):
     # Required + optional column rules. trade_ref and mtm_local are mandatory.
     columns: list[ColumnRule]
     direction: DirectionRule = Field(default_factory=DirectionRule)
-    # MTM sign applied to the raw value to reach the internal view (Barclays /
-    # Nomura report flipped; here it defaults to pass-through).
-    mtm_sign: Literal[1, -1] = 1
     # Rows whose trade_ref (lowercased) starts with any of these are banners.
     banner_prefixes: list[str] = Field(default_factory=list)
     # Header rows repeat through the body (BAML deal blocks).

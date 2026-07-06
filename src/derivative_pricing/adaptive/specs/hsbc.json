@@ -2,7 +2,6 @@
   "broker": "HSBC",
   "sheet_name": "Valuations",
   "header_anchor": "FOS TRADE ID",
-  "mtm_sign": 1,
   "repeated_headers": false,
   "banner_prefixes": [],
   "columns": [

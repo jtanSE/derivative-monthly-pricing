@@ -31,10 +31,21 @@ Implemented and tested (39 passing tests):
 
 Blocked on real (sanitized) files: more broker statements, traders DB export (Q1).
 
-> Note: MTM sign convention currently lives in two places — `spec.mtm_sign` (engine)
-> and `BROKER_MTM_SIGN`/`apply_sign_convention` (output layer). All current brokers
-> are +1 so they agree; consolidate to one source before adding Barclays/Nomura
-> specs (which flip) to avoid a double-flip.
+> **Ops audit (July 2026).** Full operations audit of the AI parser passed:
+> per-broker reconciliation vs the analyst's workbook ties out with **zero
+> unexplained deltas** (BNP: 6 statement-only refs + 21 known overrides; GS:
+> 1 statement-only ref; BAML/HSBC: exact); sign map empirically confirmed
+> 100% (Barclays 431/431 flip, Nomura 297/297 flip, 5 brokers pass-through).
+> Six hardening findings were fixed with regression tests: (1) run_month now
+> flags duplicate broker files instead of double-counting; (2) MTM sign has a
+> **single source of truth** — `mtm_sign` removed from specs, parsers emit
+> as-reported, `BROKER_MTM_SIGN` applied once downstream; (3) fx-only market
+> data no longer crashes; (4) onboarding a counterparty outside the closed
+> `Broker` enum yields an actionable message (adding one enum + sign entry is
+> the documented path for genuinely new brokerages); (5) `validate_spec` now
+> catches mis-mapped MTM columns (column collision with strike/quantity/price);
+> (6) spec JSONs reject unknown/typo'd fields (`extra="forbid"`, BOM-tolerant
+> loading).
 
 ---
 

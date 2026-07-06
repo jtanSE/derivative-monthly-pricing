@@ -2,7 +2,6 @@
   "broker": "BNP Paribas",
   "sheet_name": "Option - Reg. MM",
   "header_anchor": "BNPP's ref",
-  "mtm_sign": 1,
   "repeated_headers": false,
   "banner_prefixes": [],
   "columns": [

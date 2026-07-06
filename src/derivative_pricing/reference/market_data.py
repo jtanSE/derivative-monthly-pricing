@@ -39,12 +39,20 @@ class MarketData:
             raise KeyError(f"No month-end price for index {index_name!r} as of {self.as_of}") from None
 
 
-def load_market_data(as_of: str, fx_csv: Path | str, index_csv: Path | str) -> MarketData:
+def load_market_data(
+    as_of: str,
+    fx_csv: Path | str | None = None,
+    index_csv: Path | str | None = None,
+) -> MarketData:
+    """Either input may be omitted (e.g. FX supplied but index prices sourced
+    from the statements themselves)."""
     md = MarketData(as_of=as_of)
-    with open(fx_csv, newline="", encoding="utf-8-sig") as fh:
-        for row in csv.DictReader(fh):
-            md.fx_rates[row["currency"].strip().upper()] = float(row["rate_to_usd"])
-    with open(index_csv, newline="", encoding="utf-8-sig") as fh:
-        for row in csv.DictReader(fh):
-            md.index_prices[canonicalize_index(row["index_name"])] = float(row["price"])
+    if fx_csv is not None:
+        with open(fx_csv, newline="", encoding="utf-8-sig") as fh:
+            for row in csv.DictReader(fh):
+                md.fx_rates[row["currency"].strip().upper()] = float(row["rate_to_usd"])
+    if index_csv is not None:
+        with open(index_csv, newline="", encoding="utf-8-sig") as fh:
+            for row in csv.DictReader(fh):
+                md.index_prices[canonicalize_index(row["index_name"])] = float(row["price"])
     return md

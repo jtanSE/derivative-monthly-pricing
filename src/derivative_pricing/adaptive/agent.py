@@ -29,7 +29,8 @@ SPECS_DIR = Path(__file__).parent / "specs"
 
 
 def load_spec(path: Path | str) -> ParserSpec:
-    return ParserSpec.model_validate_json(Path(path).read_text(encoding="utf-8"))
+    # utf-8-sig: tolerate a BOM from Windows editors/tools; strict JSON rejects it
+    return ParserSpec.model_validate_json(Path(path).read_text(encoding="utf-8-sig"))
 
 
 def load_reference_specs() -> list[ParserSpec]:
@@ -88,9 +89,11 @@ def build_prompt(fp: Fingerprint, examples: list[ParserSpec]) -> str:
 
 A ParserSpec is JSON with: broker, sheet_name, header_anchor (text that
 identifies the header row), columns (each {{field, header_contains, kind}}),
-direction (mode: column|sign_of|none), mtm_sign (1 or -1), banner_prefixes,
-repeated_headers. Required fields are trade_ref and mtm_local. mtm_local is the
-trade's mark-to-market / valuation column the client consumes.
+direction (mode: column|sign_of|none), banner_prefixes, repeated_headers.
+Required fields are trade_ref and mtm_local. mtm_local is the trade's
+mark-to-market / valuation column the client consumes, extracted exactly AS
+REPORTED by the broker — never flip signs in a spec; sign conventions are
+applied downstream.
 
 Here are approved specs for other brokers:
 
@@ -157,6 +160,22 @@ def validate_spec(spec: ParserSpec, path: Path | str) -> ValidationReport:
     if with_qty < 0.5:
         issues.append(f"low quantity coverage ({with_qty:.0%})")
 
+    # Column-collision check: a drafted spec that binds mtm_local to the same
+    # physical column as strike/quantity/price is a mis-mapping (e.g. an LLM
+    # pointing "mtm_local" at the Strike column), even though it parses fine.
+    from derivative_pricing.adaptive.engine import _find_header_row, _map_columns
+    from derivative_pricing.adaptive.reader import load_grid
+
+    try:
+        grid = load_grid(path)
+        cols = _map_columns(grid, _find_header_row(grid, spec.header_anchor), spec.columns)
+        mtm_col = cols.get("mtm_local")
+        for other in ("strike", "quantity", "underlying_price", "mid_price"):
+            if mtm_col is not None and cols.get(other) == mtm_col:
+                issues.append(f"mtm_local resolves to the same column as {other!r} — mis-mapped spec")
+    except Exception:
+        pass  # header/grid problems are already reported via run_spec above
+
     return ValidationReport(
         ok=not issues,
         rows_parsed=len(marks),
@@ -219,7 +238,20 @@ def onboard_file(path: Path | str, approve: bool = False) -> OnboardResult:
                     "or hand-author specs/<broker>.json then re-run.",
         )
 
-    spec = propose_spec(path)
+    try:
+        spec = propose_spec(path)
+    except Exception as e:
+        # Most common cause: the drafted spec names a counterparty outside the
+        # closed Broker enum (schema.py). Make the remedy explicit instead of
+        # surfacing a raw validation traceback.
+        return OnboardResult(
+            "rejected",
+            message=(
+                f"Spec drafting failed: {e}. If this is a NEW counterparty, add it to "
+                "schema.Broker and (if it reports dealer-perspective MTM) to "
+                "parsers.base.BROKER_MTM_SIGN, then re-run onboarding."
+            ),
+        )
     report = validate_spec(spec, path)
     if not report.ok:
         return OnboardResult("rejected", broker=spec.broker.value, spec=spec,

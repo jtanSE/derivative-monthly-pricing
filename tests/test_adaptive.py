@@ -129,3 +129,64 @@ def test_onboard_unknown_without_key_asks_for_key(workbook_path):
         pytest.skip("API key present")
     res = onboard_file(workbook_path)
     assert res.status == "needs_key"
+
+
+# --- ops-audit regression tests ---------------------------------------------
+
+
+def test_spec_rejects_unknown_fields():
+    """Typo'd directives in a spec JSON must fail loudly, not be dropped."""
+    import json
+
+    from derivative_pricing.adaptive.spec import ParserSpec
+
+    good = json.loads((SPECS_DIR / "gs.json").read_text(encoding="utf-8"))
+    bogus = dict(good, bogus_directive=True)
+    with pytest.raises(Exception):
+        ParserSpec.model_validate(bogus)
+    # mtm_sign was removed in the sign-consolidation; it must stay gone
+    with pytest.raises(Exception):
+        ParserSpec.model_validate(dict(good, mtm_sign=-1))
+
+
+def test_single_source_of_sign_truth(tmp_path):
+    """Specs emit AS-REPORTED values; the output layer applies the broker sign
+    map exactly once. A dealer-perspective Nomura mark of -5000 must surface
+    as +5000 (internal view) in the output row — no double flip possible."""
+    import openpyxl
+
+    from derivative_pricing.adaptive.spec import ColumnRule, ParserSpec
+    from derivative_pricing.output import build_rows_from_marks
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["Nomura Trade ID", "valuationNativeCurrencyAmount", "Qty"])
+    ws.append(["EUN1", -5000.0, 10.0])
+    path = tmp_path / "nomura_like.xlsx"
+    wb.save(path)
+
+    spec = ParserSpec(broker="Nomura", header_anchor="Nomura Trade ID", columns=[
+        ColumnRule(field="trade_ref", header_contains="Nomura Trade ID"),
+        ColumnRule(field="mtm_local", header_contains="valuationNativeCurrencyAmount", kind="number"),
+        ColumnRule(field="quantity", header_contains="Qty", kind="number"),
+    ])
+    marks = run_spec(spec, path)
+    assert marks[0].mtm_local == -5000.0  # as-reported, per the BrokerMark contract
+    row = build_rows_from_marks(marks, {"USD": 1.0})[0]
+    assert row.mtm_local == 5000.0  # internal view after the single flip
+
+
+def test_validate_spec_catches_mismapped_mtm_column(gs_statement_path):
+    """A spec whose mtm_local resolves to the Strike column parses fine but is
+    a mis-mapping; the gate must flag the column collision."""
+    import json
+
+    from derivative_pricing.adaptive.spec import ParserSpec
+
+    raw = json.loads((SPECS_DIR / "gs.json").read_text(encoding="utf-8"))
+    for c in raw["columns"]:
+        if c["field"] == "mtm_local":
+            c["header_contains"] = "Strike"
+    rep = validate_spec(ParserSpec.model_validate(raw), gs_statement_path)
+    assert not rep.ok
+    assert any("same column" in i for i in rep.issues)

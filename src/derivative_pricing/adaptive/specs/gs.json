@@ -2,7 +2,6 @@
   "broker": "Goldman Sachs",
   "sheet_name": null,
   "header_anchor": "GS Ref",
-  "mtm_sign": 1,
   "repeated_headers": false,
   "banner_prefixes": [],
   "columns": [
