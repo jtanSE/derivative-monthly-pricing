@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import streamlit as st
 
 from derivative_pricing.adaptive.router import route
+from derivative_pricing.ingest import screen_marks
 from derivative_pricing.output import build_rows_from_marks, write_call_options_sectioned_xlsx
 from derivative_pricing.recon import section_totals
 
@@ -151,7 +152,24 @@ with month_tab:
         st.info("No recognized broker statements found in the project folder.")
         st.stop()
 
-    rows = build_rows_from_marks(all_marks, fx_rates={"USD": 1.0})
+    # Screen every entry: drop exact repeats, flag matured (kept for review).
+    screen = screen_marks(all_marks, as_of)
+    if screen.repeats or screen.matured or screen.unknown_maturity:
+        cols = st.columns(3)
+        cols[0].metric("Repeat entries (dropped)", len(screen.repeats))
+        cols[1].metric("Matured (flagged, kept)", len(screen.matured))
+        cols[2].metric("Unknown maturity", len(screen.unknown_maturity))
+        if screen.matured:
+            with st.expander(f"Matured entries — {len(screen.matured)} (past maturity as of {as_of})"):
+                st.dataframe([{"Broker": f.broker, "Trade Ref": f.trade_ref, "Detail": f.detail}
+                              for f in screen.matured], use_container_width=True)
+        if screen.repeats:
+            with st.expander(f"Repeat entries dropped — {len(screen.repeats)}"):
+                st.dataframe([{"Broker": f.broker, "Trade Ref": f.trade_ref}
+                              for f in screen.repeats], use_container_width=True)
+    marks_for_output = screen.kept
+
+    rows = build_rows_from_marks(marks_for_output, fx_rates={"USD": 1.0})
 
     # group rows by broker, preserving order
     groups: dict[str, list] = {}

@@ -276,7 +276,8 @@ Parser contract: `parse(file) -> list[BrokerMark]` with `broker, trade_ref, mtm_
 
 ### Phase 3 — Traders DB ingestion & live-trades maintenance
 - [ ] Loader for traders DB Excel export (15-field schema §2) — **needs example export file** `TBD`
-- [ ] Live/expired/settled classification (`Date_Expiry`, `Date_Settlement` vs as-of date)
+- [x] **Entry screening at ingestion** (`ingest/screening.py`, wired into `run_month` + UI): every incoming mark is checked for **repeats** (exact content match on broker+ref+MTM+strike+qty — dropped from the priced set; double-legged BAML legs correctly *not* flagged) and **maturity** (maturity ≤ as-of → flagged, kept for review since matured-but-unsettled still matters). Handles both broker date formats; `existing_keys` param extends the repeat check across months once a canonical store exists.
+- [ ] Live/expired/settled classification with **settlement** date (`Date_Settlement`) → true archiving of matured+settled — **needs traders DB** `TBD`
 - [ ] Auto-add new trades; update existing; archive expired+settled
 - [ ] Calls priced; puts ingested + flagged (owner decision)
 
