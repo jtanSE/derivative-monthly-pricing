@@ -189,6 +189,9 @@ dependencies = [
 ]
 
 [package.dev-dependencies]
+bloomberg = [
+    { name = "requests" },
+]
 dev = [
     { name = "pytest" },
 ]
@@ -204,6 +207,7 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
+bloomberg = [{ name = "requests", specifier = ">=2.31" }]
 dev = [{ name = "pytest", specifier = ">=8.0" }]
 ui = [{ name = "streamlit", specifier = ">=1.36" }]
 

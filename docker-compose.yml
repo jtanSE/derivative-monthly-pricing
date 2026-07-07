@@ -12,6 +12,12 @@ services:
       # Optional — a folder of statements to pre-load into the combined view.
       # If you mount a volume below, set this to its container path.
       - STATEMENTS_DIR=${STATEMENTS_DIR:-}
+      # Optional — Bloomberg Data License (HAPI) credentials, needed only to
+      # run the month-end market-data snapshot (index prices + FX). Supply via
+      # the host environment or a secrets manager; never hard-code here.
+      - BLOOMBERG_HAPI_CLIENT_ID=${BLOOMBERG_HAPI_CLIENT_ID:-}
+      - BLOOMBERG_HAPI_CLIENT_SECRET=${BLOOMBERG_HAPI_CLIENT_SECRET:-}
+      - BLOOMBERG_HAPI_CATALOG=${BLOOMBERG_HAPI_CATALOG:-}
     # Optional: mount a host folder of broker statements (read-only) and set
     # STATEMENTS_DIR=/data/statements to pre-load instead of uploading.
     # volumes:

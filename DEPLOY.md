@@ -46,6 +46,42 @@ docker run -p 8501:8501 \
   derivative-monthly-pricing
 ```
 
+## Month-end market data (Bloomberg Data License / HAPI)
+
+Index prices and FX rates are pulled from Bloomberg **once per month-end,
+frozen to disk, and then read by the pricing run**. Bloomberg is never called
+during pricing — so re-running any past month in an audit reproduces the exact
+same numbers from the frozen snapshot, not a moved live feed.
+
+```bash
+# 1) freeze the snapshot (server-side, credentials from the environment)
+BLOOMBERG_HAPI_CLIENT_ID=...  BLOOMBERG_HAPI_CLIENT_SECRET=...  BLOOMBERG_HAPI_CATALOG=... \
+  python -m derivative_pricing.snapshot_market_data \
+    --as-of 2026-03-31 --out data/2026-03-31 \
+    --universe data/templates/market_universe.json
+#   → writes data/2026-03-31/{index.csv, fx.csv, snapshot.json}
+
+# 2) price against the frozen snapshot
+python -m derivative_pricing.run_month <statements> --as-of 2026-03-31 \
+    --fx data/2026-03-31/fx.csv --index data/2026-03-31/index.csv
+```
+
+- **Dry run without credentials:** add `--fake` to step 1 to exercise the full
+  wiring with canned values (no network, no Bloomberg entitlement).
+- **The universe** (`data/templates/market_universe.json`) lists which
+  Bloomberg securities to pull — public tickers only, safe to commit. FX
+  `convention` is `direct` for `XXXUSD` pairs and `inverse` for `USDXXX`.
+- **Snapshots are immutable:** re-freezing the same as-of refuses unless you
+  pass `--overwrite` (a deliberate correction, with its own pull timestamp).
+- **`snapshot.json` is the audit record:** every value carries its ticker,
+  field, raw quote, and conversion.
+- Frozen snapshots live under `data/<as-of>/`, which `.gitignore` keeps private.
+
+> Three account-specific details in `reference/bloomberg.py` must be confirmed
+> against your DL catalog before the first live pull (each marked `# CONFIRM:`):
+> the OAuth2 token URL, the one-shot trigger name, and the response JSON shape.
+> They are isolated in unit-tested methods, so finalizing them is a small edit.
+
 ## Data handling (important for an audited environment)
 
 - **No broker data is baked into the image** (`.dockerignore` excludes

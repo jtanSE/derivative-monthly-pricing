@@ -16,6 +16,11 @@ dev = [
 ui = [
     "streamlit>=1.36",
 ]
+# Only needed to actually pull from Bloomberg Data License (HAPI). The core
+# package, the tests, and `--fake` dry runs need no network library.
+bloomberg = [
+    "requests>=2.31",
+]
 
 [build-system]
 requires = ["hatchling"]

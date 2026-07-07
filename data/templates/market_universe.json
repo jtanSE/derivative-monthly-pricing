@@ -1,0 +1,24 @@
+{
+  "_comment": "Month-end market-data universe: which Bloomberg securities to pull. Public tickers only -- carries no positions or company data, so it is safe to commit. Copy/edit per book. FX 'convention': 'direct' for XXXUSD pairs (rate_to_usd = quote); 'inverse' for USDXXX pairs (rate_to_usd = 1/quote). 'index_name' must match the name as it appears in the broker/ALIC sheets (it is canonicalized on load).",
+  "indices": [
+    {"index_name": "S&P 500", "identifier": "SPX Index", "field": "PX_LAST"},
+    {"index_name": "Russell 2000", "identifier": "RTY Index", "field": "PX_LAST"},
+    {"index_name": "NASDAQ Night Owl", "identifier": "NIGHTOWL Index", "field": "PX_LAST"},
+    {"index_name": "S&P Dynamic Intraday TCA", "identifier": "SPFDYNI Index", "field": "PX_LAST"},
+    {"index_name": "S&P MARC 5% Excess Return", "identifier": "SPMARC5P Index", "field": "PX_LAST"},
+    {"index_name": "Dynamic Balanced Asset 10", "identifier": "MQIDBA10 Index", "field": "PX_LAST"},
+    {"index_name": "Strategic Dynamic Balanced Asset 8", "identifier": "MQISDB08 Index", "field": "PX_LAST"},
+    {"index_name": "Multi-Asset Dynamic Managed 5", "identifier": "MQIMDM05 Index", "field": "PX_LAST"},
+    {"index_name": "US Strategic Balanced Asset 8", "identifier": "MQIMSB08 Index", "field": "PX_LAST"},
+    {"index_name": "US Multi-Asset Risk Managed 5", "identifier": "MQIMRM05 Index", "field": "PX_LAST"}
+  ],
+  "fx": [
+    {"currency": "USD", "fixed_rate": 1.0},
+    {"currency": "EUR", "identifier": "EURUSD Curncy", "field": "PX_LAST", "convention": "direct"},
+    {"currency": "GBP", "identifier": "GBPUSD Curncy", "field": "PX_LAST", "convention": "direct"},
+    {"currency": "AUD", "identifier": "AUDUSD Curncy", "field": "PX_LAST", "convention": "direct"},
+    {"currency": "JPY", "identifier": "USDJPY Curncy", "field": "PX_LAST", "convention": "inverse"},
+    {"currency": "CHF", "identifier": "USDCHF Curncy", "field": "PX_LAST", "convention": "inverse"},
+    {"currency": "CAD", "identifier": "USDCAD Curncy", "field": "PX_LAST", "convention": "inverse"}
+  ]
+}
