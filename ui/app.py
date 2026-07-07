@@ -23,7 +23,11 @@ import streamlit as st
 
 from derivative_pricing.adaptive.router import route
 from derivative_pricing.ingest import screen_marks
-from derivative_pricing.output import build_rows_from_marks, write_call_options_sectioned_xlsx
+from derivative_pricing.output import (
+    build_rows_from_marks,
+    split_marks_by_option_type,
+    write_call_options_sectioned_xlsx,
+)
 from derivative_pricing.recon import section_totals
 
 REPO = Path(__file__).resolve().parents[1]
@@ -169,7 +173,12 @@ with month_tab:
                               for f in screen.repeats], use_container_width=True)
     marks_for_output = screen.kept
 
-    rows = build_rows_from_marks(marks_for_output, fx_rates={"USD": 1.0})
+    # Calls and puts go to separate ALIC sheets (puts must not inflate the
+    # calls totals). The main view below is the calls sheet; puts get their own
+    # download button and count.
+    call_marks, put_marks = split_marks_by_option_type(marks_for_output)
+    rows = build_rows_from_marks(call_marks, fx_rates={"USD": 1.0})
+    put_rows = build_rows_from_marks(put_marks, fx_rates={"USD": 1.0}) if put_marks else []
 
     # group rows by broker, preserving order
     groups: dict[str, list] = {}
@@ -182,16 +191,32 @@ with month_tab:
     gt_shares = sum(t.shares for t in (section_totals(g) for g in groups.values()))
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Brokers", len(groups))
-    c2.metric("Trades", len(rows))
+    c2.metric("Call trades", len(rows))
     c3.metric("Grand Notional (Ccy)", f"{gt_notl:,.0f}")
     c4.metric("Grand MTM (Ccy)", f"{gt_mtm:,.0f}")
+    if put_rows:
+        st.caption(f"➕ {len(put_rows)} put option(s) split into a separate Put "
+                   "Options sheet (kept out of the calls totals above).")
 
-    # download the real ALIC-shaped xlsx
-    out_path = Path(tempfile.gettempdir()) / f"call_options_{as_of}.xlsx"
-    write_call_options_sectioned_xlsx(rows, out_path, as_of=as_of)
-    st.download_button("⬇ Download ALIC-shaped .xlsx", out_path.read_bytes(),
-                       file_name=f"call_options_{as_of}.xlsx",
-                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    # download the ALIC-shaped calls sheet + a matching puts sheet
+    dl1, dl2 = st.columns(2)
+    call_path = Path(tempfile.gettempdir()) / f"call_options_{as_of}.xlsx"
+    write_call_options_sectioned_xlsx(rows, call_path, as_of=as_of,
+                                      sheet_label="Call Options")
+    dl1.download_button(f"⬇ Call Options .xlsx ({len(rows)} trades)",
+                        call_path.read_bytes(),
+                        file_name=f"call_options_{as_of}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    if put_rows:
+        put_path = Path(tempfile.gettempdir()) / f"put_options_{as_of}.xlsx"
+        write_call_options_sectioned_xlsx(put_rows, put_path, as_of=as_of,
+                                          sheet_label="Put Options")
+        dl2.download_button(f"⬇ Put Options .xlsx ({len(put_rows)} trades)",
+                            put_path.read_bytes(),
+                            file_name=f"put_options_{as_of}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    else:
+        dl2.info("No put options in this set.")
 
     st.divider()
     # render each broker section with its F7 subtotal

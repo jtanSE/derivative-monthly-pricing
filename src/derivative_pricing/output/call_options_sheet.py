@@ -126,6 +126,31 @@ def build_rows_from_marks(
     return rows
 
 
+def option_type(mark: BrokerMark) -> str:
+    """'put' or 'call' for a mark, from its Call/Put field.
+
+    Only an explicit put marker ('P'/'PUT') routes a trade to the puts sheet.
+    Everything else -- plain calls AND the MCB net-MTM structures that carry no
+    Call/Put marker -- is treated as a call, matching the analyst's ALIC, which
+    books the MCB call-spreads in the Call Options sheet. A broker whose spec
+    does not capture Call/Put therefore defaults to calls; onboarding a broker
+    that trades puts requires mapping its Call/Put column.
+    """
+    raw = mark.extra.get("put_call")
+    return "put" if raw is not None and str(raw).strip().upper().startswith("P") else "call"
+
+
+def split_marks_by_option_type(
+    marks: list[BrokerMark],
+) -> tuple[list[BrokerMark], list[BrokerMark]]:
+    """Partition marks into (calls, puts). Total is preserved -- every mark
+    lands in exactly one sheet, so nothing is silently dropped."""
+    calls, puts = [], []
+    for m in marks:
+        (puts if option_type(m) == "put" else calls).append(m)
+    return calls, puts
+
+
 def write_call_options_xlsx(
     rows: list[CallOptionsOutputRow],
     path: Path | str,
@@ -194,13 +219,16 @@ def _subtotal_cells(rows: list[CallOptionsOutputRow], label: str) -> list:
 
 
 def write_call_options_sectioned_xlsx(
-    rows: list[CallOptionsOutputRow], path: Path | str, *, as_of: str
+    rows: list[CallOptionsOutputRow], path: Path | str, *, as_of: str,
+    sheet_label: str = "Call Options",
 ) -> Path:
-    """Write an ALIC-shaped Call Options sheet: one section per broker (banner
-    -> header -> trades -> positive-only subtotal), then a grand total.
+    """Write an ALIC-shaped option sheet: one section per broker (banner ->
+    header -> trades -> positive-only subtotal), then a grand total.
 
     Mirrors the analyst's actual layout (section banners + F7 subtotals + F8
-    grand total) rather than a flat table.
+    grand total) rather than a flat table. ``sheet_label`` names the sheet and
+    its section title, so the same writer produces both the Call Options and
+    Put Options ALIC sheets.
     """
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font
@@ -210,7 +238,7 @@ def write_call_options_sectioned_xlsx(
 
     wb = Workbook()
     ws = wb.active
-    ws.title = "Call Options"
+    ws.title = sheet_label
     bold = Font(bold=True)
 
     # group rows by broker, preserving first-seen order
@@ -223,7 +251,7 @@ def write_call_options_sectioned_xlsx(
     for broker, broker_rows in groups.items():
         banner = _BANNER.get(broker, broker)
         ws.cell(row=r_idx, column=1, value=banner).font = bold
-        ws.cell(row=r_idx + 1, column=1, value="Equity Derivatives - ALIC Call Options")
+        ws.cell(row=r_idx + 1, column=1, value=f"Equity Derivatives - ALIC {sheet_label}")
         ws.cell(row=r_idx + 2, column=1, value=as_of)
         header_r = r_idx + 3
         for c, name in enumerate(COLUMNS, start=1):

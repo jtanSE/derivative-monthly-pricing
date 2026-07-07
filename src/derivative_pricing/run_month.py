@@ -23,7 +23,11 @@ from pathlib import Path
 
 from derivative_pricing.adaptive.router import route_folder
 from derivative_pricing.ingest import screen_marks
-from derivative_pricing.output import build_rows_from_marks, write_call_options_sectioned_xlsx
+from derivative_pricing.output import (
+    build_rows_from_marks,
+    split_marks_by_option_type,
+    write_call_options_sectioned_xlsx,
+)
 from derivative_pricing.output.call_options_sheet import COLUMNS
 
 
@@ -42,8 +46,15 @@ class MonthRunSummary:
     matured_entries: list[tuple[str, str, str]] = field(default_factory=list)  # (broker, ref, detail)
     unknown_maturity: list[tuple[str, str]] = field(default_factory=list)
     total_marks: int = 0
+    # Calls and puts are written to separate ALIC-shaped sheets. The MVP prices
+    # calls; puts are captured and split out so they are never mixed into the
+    # calls sheet (which would double the totals) nor silently dropped.
+    call_marks: int = 0
+    put_marks: int = 0
     output_xlsx: str | None = None
     output_csv: str | None = None
+    put_output_xlsx: str | None = None
+    put_output_csv: str | None = None
 
 
 def run_month(
@@ -78,25 +89,41 @@ def run_month(
     priced_marks = screen.kept
     summary.total_marks = len(priced_marks)
 
-    rows = build_rows_from_marks(priced_marks, fx_rates or {"USD": 1.0}, index_prices)
+    # Calls and puts go to separate ALIC sheets (see MonthRunSummary note).
+    call_marks, put_marks = split_marks_by_option_type(priced_marks)
+    summary.call_marks = len(call_marks)
+    summary.put_marks = len(put_marks)
+
+    fx = fx_rates or {"USD": 1.0}
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
 
-    # ALIC-shaped sheet: per-broker sections + subtotals + grand total
-    xlsx = write_call_options_sectioned_xlsx(
-        rows, out / f"call_options_{as_of}.xlsx", as_of=as_of
-    )
-    # flat CSV: one row per trade, for downstream/machine use
-    csv_path = out / f"call_options_{as_of}.csv"
-    with open(csv_path, "w", newline="", encoding="utf-8") as fh:
+    # ALIC-shaped calls sheet: per-broker sections + subtotals + grand total.
+    call_rows = build_rows_from_marks(call_marks, fx, index_prices)
+    summary.output_xlsx = str(write_call_options_sectioned_xlsx(
+        call_rows, out / f"call_options_{as_of}.xlsx", as_of=as_of,
+        sheet_label="Call Options"))
+    summary.output_csv = str(_write_rows_csv(call_rows, out / f"call_options_{as_of}.csv"))
+
+    # Matching puts sheet -- only when there are puts (no empty artifacts).
+    if put_marks:
+        put_rows = build_rows_from_marks(put_marks, fx, index_prices)
+        summary.put_output_xlsx = str(write_call_options_sectioned_xlsx(
+            put_rows, out / f"put_options_{as_of}.xlsx", as_of=as_of,
+            sheet_label="Put Options"))
+        summary.put_output_csv = str(_write_rows_csv(put_rows, out / f"put_options_{as_of}.csv"))
+
+    return summary
+
+
+def _write_rows_csv(rows, path: Path) -> Path:
+    """Flat CSV: one row per trade, for downstream/machine use."""
+    with open(path, "w", newline="", encoding="utf-8") as fh:
         w = _csv.writer(fh)
         w.writerow(COLUMNS)
         for row in rows:
             w.writerow(row.as_cells())
-
-    summary.output_xlsx = str(xlsx)
-    summary.output_csv = str(csv_path)
-    return summary
+    return path
 
 
 def _print_summary(s: MonthRunSummary) -> None:
@@ -131,9 +158,14 @@ def _print_summary(s: MonthRunSummary) -> None:
         print(f"\nUnparseable maturity ({len(s.unknown_maturity)}):")
         for broker, ref in s.unknown_maturity[:20]:
             print(f"  [?MAT] {broker} {ref}")
-    print(f"\nTotal trades (priced): {s.total_marks}")
-    print(f"Output: {s.output_xlsx}")
-    print(f"        {s.output_csv}")
+    print(f"\nTotal trades (priced): {s.total_marks}  (calls: {s.call_marks}, puts: {s.put_marks})")
+    print(f"Calls output: {s.output_xlsx}")
+    print(f"              {s.output_csv}")
+    if s.put_output_xlsx:
+        print(f"Puts output:  {s.put_output_xlsx}")
+        print(f"              {s.put_output_csv}")
+    else:
+        print("Puts output:  none (no put options in this run)")
 
 
 def main(argv: list[str] | None = None) -> None:
