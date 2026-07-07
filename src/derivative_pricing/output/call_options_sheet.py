@@ -21,11 +21,11 @@ from derivative_pricing.pricing import notional_local, price_per_unit, to_usd
 from derivative_pricing.reference.indices import canonicalize_index
 from derivative_pricing.schema import BrokerMark
 
-# Mirrors the analyst's Call Options header row (cols A-L).
+# Mirrors the analyst's Call Options header row (cols A-L), plus Broker for CSV output.
 COLUMNS = [
     "Cusip", "Index", "Trade Reference", "Strike Rate", "Maturity Date",
     "Currency", "Notional (Ccy)", "Notional (USD)", "MTM (Ccy)", "MTM (USD)",
-    "Shares", "Price (Ccy)",
+    "Shares", "Price (Ccy)", "Broker",
 ]
 
 
@@ -50,7 +50,7 @@ class CallOptionsOutputRow:
             self.cusip, self.index, self.trade_reference, self.strike_rate,
             self.maturity_date, self.currency, self.notional_local,
             self.notional_usd, self.mtm_local, self.mtm_usd, self.shares,
-            self.price_local,
+            self.price_local, self.broker,
         ]
 
 
