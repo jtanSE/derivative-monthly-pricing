@@ -43,6 +43,19 @@ def _save_temp(uploaded) -> Path:
     return Path(tmp.name)
 
 
+def _unit_price(m):
+    """F5 per-unit price = MTM / signed shares (short legs -> negative shares).
+
+    MTM here is as-reported by the broker (no sign convention applied yet);
+    None when the statement carries no quantity (e.g. Nomura)."""
+    qty = m.extra.get("quantity")
+    if not qty:
+        return None
+    if str(m.extra.get("direction") or "").casefold() == "short":
+        qty = -qty
+    return round(m.mtm_local / qty, 4)
+
+
 def _marks_table(marks):
     return [
         {
@@ -52,6 +65,7 @@ def _marks_table(marks):
             "Underlying": m.extra.get("underlying"),
             "Strike": m.extra.get("strike"),
             "Quantity": m.extra.get("quantity"),
+            "Price (Ccy)": _unit_price(m),
             "Direction": m.extra.get("direction"),
             "Expiry": m.extra.get("expiry"),
         }
@@ -81,14 +95,21 @@ single_tab, month_tab = st.tabs(["Single statement", "Month-end combined (ALIC s
 
 # ----------------------------------------------------------------------------
 with single_tab:
-    uploaded = st.file_uploader("Drop a broker statement", type=["xls", "xlsx"],
-                                key="single")
+    uploaded = st.file_uploader(
+        "Drag a broker statement here — or click to browse",
+        type=["xls", "xlsx"], key="single",
+        help="Drag an .xls/.xlsx straight from your file explorer onto the box.",
+    )
     if uploaded is None:
         known = ", ".join(sorted(s.broker.value for s in load_reference_specs()))
         st.info(f"Waiting for a file…  (Known formats: {known}.)")
     else:
         with st.spinner(f"Parsing {uploaded.name} …"):
-            result = route(_save_temp(uploaded))
+            try:
+                result = route(_save_temp(uploaded))
+            except Exception as e:  # noqa: BLE001 — unreadable/corrupt/encrypted files
+                st.error(f"**Could not read** {uploaded.name}: {e}")
+                st.stop()
         if result.status == "unknown":
             st.warning(f"**Unrecognized format** — {uploaded.name}. Would be handed to "
                        "the onboarding agent to draft a new spec.")
@@ -103,8 +124,11 @@ with month_tab:
     as_of = st.text_input("Month-end date", value="2026-03-31")
     st.markdown("Combined ALIC sheet built from the statements you drop below.")
 
-    extra = st.file_uploader("Add broker statements", type=["xls", "xlsx"],
-                             accept_multiple_files=True, key="month")
+    extra = st.file_uploader(
+        "Drag broker statements here — or click to browse (multiple at once)",
+        type=["xls", "xlsx"], accept_multiple_files=True, key="month",
+        help="Drag one or more .xls/.xlsx files straight from your file explorer.",
+    )
 
     sources = [("upload", _save_temp(f), f.name) for f in (extra or [])]
 
