@@ -1,0 +1,69 @@
+{
+  "broker": "Morgan Stanley",
+  "sheet_name": "Equity-T1",
+  "header_anchor": "Mark Date",
+  "columns": [
+    {
+      "field": "trade_ref",
+      "header_contains": "Cusip",
+      "kind": "text"
+    },
+    {
+      "field": "mtm_local",
+      "header_contains": "MTM",
+      "kind": "number"
+    },
+    {
+      "field": "currency",
+      "header_contains": "Position Currency",
+      "kind": "text"
+    },
+    {
+      "field": "trade_date",
+      "header_contains": "Trade Date",
+      "kind": "date"
+    },
+    {
+      "field": "expiry",
+      "header_contains": "Expiry Date",
+      "kind": "date"
+    },
+    {
+      "field": "strike",
+      "header_contains": "Strike",
+      "kind": "number"
+    },
+    {
+      "field": "quantity",
+      "header_contains": "Option Qty",
+      "kind": "number"
+    },
+    {
+      "field": "underlying_price",
+      "header_contains": "Underlier Price",
+      "kind": "number"
+    },
+    {
+      "field": "put_call",
+      "header_contains": "Call/Put",
+      "kind": "text"
+    },
+    {
+      "field": "underlying",
+      "header_contains": "Und Description",
+      "kind": "text"
+    }
+  ],
+  "direction": {
+    "mode": "column",
+    "header_contains": "CP Buy/Sell",
+    "short_values": [
+      "s",
+      "sell",
+      "short"
+    ],
+    "sign_of_field": null
+  },
+  "banner_prefixes": [],
+  "repeated_headers": false
+}

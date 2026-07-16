@@ -9,6 +9,10 @@ services:
       # The app works fully without it. Provide via the host environment or a
       # secrets manager; do NOT hard-code it here.
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # Kill switch for the AI onboarding path. Unset/empty = enabled. Set to
+      # "false" to turn the model off entirely (deterministic parsing of known
+      # brokers is unaffected; unknown formats then require a hand-authored spec).
+      - AI_ONBOARDING_ENABLED=${AI_ONBOARDING_ENABLED:-}
       # Optional — a folder of statements to pre-load into the combined view.
       # If you mount a volume below, set this to its container path.
       - STATEMENTS_DIR=${STATEMENTS_DIR:-}

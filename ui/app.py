@@ -12,7 +12,6 @@ The actual files are parsed via the router -- never screenshots.
 
 from __future__ import annotations
 
-import os
 import sys
 import tempfile
 from pathlib import Path
@@ -21,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import streamlit as st
 
+from derivative_pricing.adaptive.agent import load_reference_specs
 from derivative_pricing.adaptive.router import route
 from derivative_pricing.ingest import screen_marks
 from derivative_pricing.output import (
@@ -29,13 +29,6 @@ from derivative_pricing.output import (
     write_call_options_sectioned_xlsx,
 )
 from derivative_pricing.recon import section_totals
-
-REPO = Path(__file__).resolve().parents[1]
-# Where to look for already-present statements. Defaults to the project folder
-# for local dev; in a hosted container set STATEMENTS_DIR to a mounted volume
-# (or leave it empty and rely on the uploader). Real broker data is never baked
-# into the image.
-STATEMENTS_DIR = Path(os.environ.get("STATEMENTS_DIR", str(REPO)))
 
 st.set_page_config(page_title="Derivative MTM Parser", page_icon="📄", layout="wide")
 st.title("📄 Broker Statement Parser")
@@ -75,8 +68,6 @@ def _rows_table(rows):
             "Strike Rate": r.strike_rate,
             "Maturity Date": r.maturity_date,
             "Currency": r.currency,
-            "Notional (Ccy)": None if r.notional_local is None else round(r.notional_local, 2),
-            "Notional (USD)": None if r.notional_usd is None else round(r.notional_usd, 2),
             "MTM (Ccy)": None if r.mtm_local is None else round(r.mtm_local, 2),
             "MTM (USD)": None if r.mtm_usd is None else round(r.mtm_usd, 2),
             "Shares": r.shares,
@@ -93,7 +84,8 @@ with single_tab:
     uploaded = st.file_uploader("Drop a broker statement", type=["xls", "xlsx"],
                                 key="single")
     if uploaded is None:
-        st.info("Waiting for a file…  (BNP, BAML, Goldman Sachs and HSBC are known.)")
+        known = ", ".join(sorted(s.broker.value for s in load_reference_specs()))
+        st.info(f"Waiting for a file…  (Known formats: {known}.)")
     else:
         with st.spinner(f"Parsing {uploaded.name} …"):
             result = route(_save_temp(uploaded))
@@ -109,17 +101,12 @@ with single_tab:
 # ----------------------------------------------------------------------------
 with month_tab:
     as_of = st.text_input("Month-end date", value="2026-03-31")
-    st.markdown("Combined ALIC sheet built from any statements found in the configured "
-                "folder, plus anything you drop below.")
+    st.markdown("Combined ALIC sheet built from the statements you drop below.")
 
     extra = st.file_uploader("Add broker statements", type=["xls", "xlsx"],
                              accept_multiple_files=True, key="month")
 
-    # Sources: files already present in STATEMENTS_DIR + any uploaded now.
-    repo_files = sorted(p for p in STATEMENTS_DIR.glob("*.xls") if " - Copy" not in p.name)
-    repo_files += sorted(STATEMENTS_DIR.glob("*.xlsx"))
-    sources = [("repo", p) for p in repo_files] + \
-              [("upload", _save_temp(f), f.name) for f in (extra or [])]
+    sources = [("upload", _save_temp(f), f.name) for f in (extra or [])]
 
     all_marks, loaded, unknown, dupes = [], [], [], []
     seen_brokers: set[str] = set()
@@ -153,7 +140,7 @@ with month_tab:
             if unknown:
                 st.write("Skipped (unrecognized / not a statement): " + ", ".join(unknown))
     if not all_marks:
-        st.info("No recognized broker statements found in the project folder.")
+        st.info("Drop broker statements above to build the combined sheet.")
         st.stop()
 
     # Screen every entry: drop exact repeats, flag matured (kept for review).
@@ -186,14 +173,13 @@ with month_tab:
         groups.setdefault(r.broker or "Unknown", []).append(r)
 
     # grand-total metrics
-    gt_notl = sum(t.notional_local for t in (section_totals(g) for g in groups.values()))
     gt_mtm = sum(t.mtm_local for t in (section_totals(g) for g in groups.values()))
     gt_shares = sum(t.shares for t in (section_totals(g) for g in groups.values()))
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Brokers", len(groups))
     c2.metric("Call trades", len(rows))
-    c3.metric("Grand Notional (Ccy)", f"{gt_notl:,.0f}")
-    c4.metric("Grand MTM (Ccy)", f"{gt_mtm:,.0f}")
+    c3.metric("Grand MTM (Ccy)", f"{gt_mtm:,.0f}")
+    c4.metric("Grand Shares", f"{gt_shares:,.0f}")
     if put_rows:
         st.caption(f"➕ {len(put_rows)} put option(s) split into a separate Put "
                    "Options sheet (kept out of the calls totals above).")
@@ -225,14 +211,14 @@ with month_tab:
         st.subheader(broker)
         st.dataframe(_rows_table(broker_rows), use_container_width=True, height=260)
         st.markdown(
-            f"**{broker} subtotal** — Notional (Ccy): `{t.notional_local:,.2f}` · "
+            f"**{broker} subtotal** — "
             f"MTM (Ccy): `{t.mtm_local:,.2f}` · Shares: `{t.shares:,.2f}`  \n"
-            f"<span style='color:gray'>F7: notional & shares are positive-only "
+            f"<span style='color:gray'>F7: shares are positive-only "
             f"(short legs excluded); MTM is a plain sum.</span>",
             unsafe_allow_html=True,
         )
         st.divider()
 
     st.markdown(f"## GRAND TOTAL  \n"
-                f"Notional (Ccy): `{gt_notl:,.2f}` · MTM (Ccy): `{gt_mtm:,.2f}` · "
+                f"MTM (Ccy): `{gt_mtm:,.2f}` · "
                 f"Shares: `{gt_shares:,.2f}`")

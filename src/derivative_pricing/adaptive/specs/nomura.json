@@ -1,0 +1,59 @@
+{
+  "broker": "Nomura",
+  "sheet_name": "Sheet0",
+  "header_anchor": "tradeIdentifierPartyA",
+  "columns": [
+    {
+      "field": "trade_ref",
+      "header_contains": "tradeIdentifierPartyA",
+      "kind": "text"
+    },
+    {
+      "field": "mtm_local",
+      "header_contains": "valuationNativeCurrencyAmount",
+      "kind": "number"
+    },
+    {
+      "field": "currency",
+      "header_contains": "valuationNativeCurrency",
+      "kind": "text"
+    },
+    {
+      "field": "trade_date",
+      "header_contains": "tradeDate",
+      "kind": "date"
+    },
+    {
+      "field": "expiry",
+      "header_contains": "maturityDate",
+      "kind": "date"
+    },
+    {
+      "field": "strike",
+      "header_contains": "strikePrice",
+      "kind": "number"
+    },
+    {
+      "field": "put_call",
+      "header_contains": "putCall",
+      "kind": "text"
+    },
+    {
+      "field": "underlying",
+      "header_contains": "underlying",
+      "kind": "text"
+    }
+  ],
+  "direction": {
+    "mode": "column",
+    "header_contains": "buySell",
+    "short_values": [
+      "sell",
+      "short",
+      "s"
+    ],
+    "sign_of_field": null
+  },
+  "banner_prefixes": [],
+  "repeated_headers": false
+}

@@ -34,6 +34,22 @@ Prefer a secrets manager / orchestrator secret over a plain env var in
 production. Without the key, onboarding a new broker falls back to a human
 authoring its spec JSON; everything else is unaffected.
 
+### Kill switch — turning the AI parser off
+
+The model is used **only** to draft a spec for a brand-new broker format (a
+rare, one-time event); the monthly deterministic pipeline never calls it. To
+turn that AI path off entirely — e.g. a spend guardrail — set:
+
+```bash
+docker run -p 8501:8501 -e AI_ONBOARDING_ENABLED=false derivative-monthly-pricing
+```
+
+Unset or empty = enabled (the default). When disabled, unknown formats return a
+clear "AI onboarding is disabled" result and must be hand-authored as
+`specs/<broker>.json`; **parsing of already-known brokers is unaffected.**
+For a hard backstop independent of the app, also set a workspace spend limit on
+the Anthropic API key in the Console.
+
 ## Pre-loading statements (optional)
 
 By default users upload statements in the browser. To pre-load a folder

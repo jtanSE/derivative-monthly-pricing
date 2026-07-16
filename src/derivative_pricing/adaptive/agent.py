@@ -27,6 +27,22 @@ from derivative_pricing.adaptive.spec import ParserSpec
 
 SPECS_DIR = Path(__file__).parent / "specs"
 
+# Kill switch for LLM-assisted onboarding. The deterministic monthly pipeline
+# (route -> run_spec -> pricing) never calls the model, so it is unaffected by
+# this flag either way. Only propose_spec / onboard_file consult it.
+AI_ONBOARDING_FLAG = "AI_ONBOARDING_ENABLED"
+_DISABLED_VALUES = {"false", "0", "no", "off"}
+
+
+def ai_onboarding_enabled(env: dict[str, str] | None = None) -> bool:
+    """True unless AI_ONBOARDING_ENABLED is set to a falsey value
+    (false / 0 / no / off, case-insensitive). Unset or empty -> enabled, so the
+    container default keeps onboarding available; an operator disables it by
+    setting the flag explicitly."""
+    e = env if env is not None else os.environ
+    raw = (e.get(AI_ONBOARDING_FLAG) or "").strip().lower()
+    return raw not in _DISABLED_VALUES
+
 
 def load_spec(path: Path | str) -> ParserSpec:
     # utf-8-sig: tolerate a BOM from Windows editors/tools; strict JSON rejects it
@@ -106,8 +122,15 @@ Now produce ONLY a JSON ParserSpec (no prose) for this new statement:
 
 
 def propose_spec(path: Path | str, model: str = "claude-opus-4-8") -> ParserSpec:
-    """Draft a spec with Claude. Requires ANTHROPIC_API_KEY; raises otherwise
-    with guidance to use the manual/human path."""
+    """Draft a spec with Claude. Requires the AI-onboarding kill switch to be on
+    and ANTHROPIC_API_KEY to be set; raises otherwise with guidance to use the
+    manual/human path."""
+    if not ai_onboarding_enabled():
+        raise RuntimeError(
+            f"AI onboarding is disabled ({AI_ONBOARDING_FLAG}=false): no model "
+            "call will be made. Re-enable it, or hand-author specs/<broker>.json "
+            "and validate with validate_spec()."
+        )
     if not os.environ.get("ANTHROPIC_API_KEY"):
         raise RuntimeError(
             "ANTHROPIC_API_KEY not set: cannot call the model. Build the spec "
@@ -206,7 +229,7 @@ def save_spec(spec: ParserSpec, filename: str | None = None, specs_dir: Path | N
 
 @dataclass
 class OnboardResult:
-    status: str  # "already_known" | "proposed" | "saved" | "needs_key" | "rejected"
+    status: str  # "already_known" | "proposed" | "saved" | "needs_key" | "rejected" | "disabled"
     broker: str | None = None
     spec: ParserSpec | None = None
     validation: ValidationReport | None = None
@@ -230,6 +253,18 @@ def onboard_file(path: Path | str, approve: bool = False) -> OnboardResult:
     if matches:
         return OnboardResult("already_known", broker=matches[0].broker.value,
                              spec=matches[0], message="A spec already covers this format.")
+
+    # Kill switch: unknown format, but the AI path is turned off. Deterministic
+    # parsing of already-known brokers above is never affected.
+    if not ai_onboarding_enabled():
+        return OnboardResult(
+            "disabled",
+            message=(
+                f"Unknown format, but AI onboarding is disabled "
+                f"({AI_ONBOARDING_FLAG}=false). Re-enable it, or hand-author "
+                "specs/<broker>.json then re-run."
+            ),
+        )
 
     if not os.environ.get("ANTHROPIC_API_KEY"):
         return OnboardResult(

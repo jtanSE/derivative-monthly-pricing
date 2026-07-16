@@ -43,7 +43,21 @@ class Grid:
 
     def num(self, r: int, c: int):
         v = self._raw(r, c)
-        return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+        if isinstance(v, bool):
+            return None
+        if isinstance(v, (int, float)):
+            return float(v)
+        # Some brokers (e.g. Morgan Stanley) export every number as TEXT with
+        # thousands separators -- "1,460,405.0273". Coerce those; genuinely
+        # non-numeric text (dates, labels, currencies) still returns None.
+        if isinstance(v, str):
+            s = v.strip().replace(",", "")
+            if s:
+                try:
+                    return float(s)
+                except ValueError:
+                    return None
+        return None
 
     def date_iso(self, r: int, c: int):
         v = self._raw(r, c)
@@ -86,7 +100,11 @@ def _load_xls(path: Path) -> Grid:
 def _load_xlsx(path: Path) -> Grid:
     import openpyxl
 
-    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    # read_only=True trusts the workbook's cached <dimension> tag; some broker
+    # exports (e.g. Nomura) ship a bogus "A1:A1" dimension that hides the whole
+    # table. Loading non-read-only recomputes dimensions from the actual cells.
+    # Broker statements are small (hundreds of rows), so the cost is negligible.
+    wb = openpyxl.load_workbook(path, read_only=False, data_only=True)
     sheet = wb[wb.sheetnames[0]]
     cells: list[list] = []
     for row in sheet.iter_rows(values_only=True):
