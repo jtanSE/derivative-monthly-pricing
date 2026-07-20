@@ -34,6 +34,11 @@
       "kind": "number"
     },
     {
+      "field": "quantity",
+      "header_contains": "exchangedNotional1Amount",
+      "kind": "number"
+    },
+    {
       "field": "put_call",
       "header_contains": "putCall",
       "kind": "text"
