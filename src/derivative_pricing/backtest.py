@@ -35,9 +35,13 @@ from pathlib import Path
 from derivative_pricing.adaptive.agent import load_reference_specs
 from derivative_pricing.adaptive.engine import _find_header_row, _map_columns
 from derivative_pricing.adaptive.reader import load_grid
+from derivative_pricing.adaptive.router import route
 from derivative_pricing.adaptive.spec import ParserSpec
+from derivative_pricing.output import build_rows_from_marks, split_marks_by_option_type
 from derivative_pricing.schema import Broker
 from derivative_pricing.workbook.call_options import read_call_options
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Confirmed field -> how to read it off an analyst CallOptionRow. Numeric only:
 # these are the values a brokerage column could reproduce.
@@ -149,6 +153,113 @@ def discover_all(
         conf = confirmed_values(confirmed_path, broker, field)
         report[field] = discover_field_source(statement_path, spec, conf, tol_rel=tol_rel) if conf else []
     return report
+
+
+# ---------------------------------------------------------------------------
+# Cross-time regression: reconcile a spec's output against a PAST month's
+# confirmed file, so a spec that worked in March can't silently drift in April.
+# ---------------------------------------------------------------------------
+@dataclass
+class ReconReport:
+    broker: str
+    confirmed_refs: int
+    parsed_refs: int
+    common: int
+    to_cent: int
+    missing: list[str]     # confirmed refs we failed to parse
+    overrides: list[str]   # common refs whose MTM differs (analyst overrides)
+
+    @property
+    def rate(self) -> float:
+        return self.to_cent / self.common if self.common else 0.0
+
+
+def reconcile_calls_to_confirmed(
+    confirmed_path: Path | str,
+    statement_path: Path | str,
+    broker: Broker,
+    *,
+    tol: float = 0.01,
+) -> ReconReport:
+    """Reconcile a broker statement's CALLS against the confirmed Call Options
+    sheet, per-reference (sums, so BNP's MCB net line and BAML's two legs
+    reconcile uniformly). MTM carries the sign convention via build_rows."""
+    calls, _puts = split_marks_by_option_type(route(statement_path).marks)
+    rows = build_rows_from_marks(calls, {"USD": 1.0})
+    ours: dict[str, float] = defaultdict(float)
+    for r in rows:
+        ours[r.trade_reference] += (r.mtm_local or 0)
+
+    ref: dict[str, float] = defaultdict(float)
+    for row in read_call_options(confirmed_path).rows:
+        if row.broker == broker:
+            ref[row.trade_ref] += (row.mtm_local or 0)
+
+    common = set(ours) & set(ref)
+    to_cent = sum(1 for k in common if abs(ours[k] - ref[k]) <= tol)
+    overrides = sorted(k for k in common if abs(ours[k] - ref[k]) > tol)
+    missing = sorted(set(ref) - set(ours))
+    return ReconReport(broker.value, len(ref), len(ours), len(common),
+                       to_cent, missing, overrides)
+
+
+@dataclass
+class BacktestMonth:
+    as_of: str
+    confirmed: Path
+    statements: list[Path]
+
+
+# March 2026 is the sample that ships in the repo root; future months are dropped
+# into data/backtests/<as-of>/ (git-ignored) as they are confirmed.
+_MARCH_2026 = (
+    "ALIC MTM Prices for Call Options Test - 31 March 2026.xls",
+    [
+        "BNP AUGUSTAR LIFE INSURANCE COMPANY_01 Apr 2026 (2).xls",
+        "BAML 03-31-2026_Results_82654.xls",
+        "GS_Ohio National Life Ins Co (EQ)_20260331.xls",
+        "HSBC GV_AUGUSTAR LIFE INSURANCE COMPANY REG15_31Mar2026_070407.xlsx",
+    ],
+)
+
+
+def _find_confirmed(folder: Path) -> Path | None:
+    """A month folder's confirmed file: the one whose name flags it as the
+    analyst reference ('ALIC' or 'confirmed')."""
+    for p in sorted(folder.glob("*.xls*")):
+        low = p.name.lower()
+        if "alic" in low or "confirmed" in low:
+            return p
+    return None
+
+
+def discover_backtest_months(repo: Path | str = REPO_ROOT) -> list[BacktestMonth]:
+    """Every past month we can backtest: the built-in March 2026 sample (repo
+    root) plus any data/backtests/<as-of>/ folder holding a confirmed file and
+    its broker statements. All git-ignored; absent months are simply skipped."""
+    repo = Path(repo)
+    months: list[BacktestMonth] = []
+
+    confirmed_name, statement_names = _MARCH_2026
+    root_confirmed = repo / confirmed_name
+    if root_confirmed.exists():
+        stmts = [repo / n for n in statement_names if (repo / n).exists()]
+        if stmts:
+            months.append(BacktestMonth("2026-03", root_confirmed, stmts))
+
+    bt_dir = repo / "data" / "backtests"
+    if bt_dir.is_dir():
+        for d in sorted(bt_dir.iterdir()):
+            if not d.is_dir():
+                continue
+            confirmed = _find_confirmed(d)
+            if confirmed is None:
+                continue
+            stmts = [p for p in sorted(d.glob("*.xls*")) if p != confirmed
+                     and not p.name.startswith("~$")]
+            if stmts:
+                months.append(BacktestMonth(d.name, confirmed, stmts))
+    return months
 
 
 def _broker_from_name(name: str) -> Broker:
