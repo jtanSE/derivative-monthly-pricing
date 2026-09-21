@@ -60,5 +60,13 @@
     "sign_of_field": null
   },
   "banner_prefixes": [],
-  "repeated_headers": false
+  "repeated_headers": false,
+  "row_filter": {
+    "header_contains": "productType",
+    "exclude_values": ["ForwardBondTrade"]
+  },
+  "valuation_date": {
+    "mode": "column",
+    "header_contains": "valuationDate"
+  }
 }

@@ -21,5 +21,9 @@
     "mode": "column",
     "header_contains": "BuySell",
     "short_values": ["short", "sell", "s"]
+  },
+  "valuation_date": {
+    "mode": "column",
+    "header_contains": "MtM date COB"
   }
 }

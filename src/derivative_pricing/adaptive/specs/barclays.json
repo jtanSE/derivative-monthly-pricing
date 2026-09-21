@@ -1,0 +1,32 @@
+{
+  "broker": "Barclays",
+  "sheet_name": "CVGClientStatement",
+  "header_anchor": "Trade Ref",
+  "header_requires": ["Put / Call", "Strike Rate"],
+  "multi_table": true,
+  "repeated_headers": false,
+  "split_legs": false,
+  "banner_prefixes": [],
+  "columns": [
+    {"field": "trade_ref", "header_contains": "Trade Ref", "kind": "text"},
+    {"field": "mtm_local", "header_contains": "MTM(Ccy)", "kind": "number"},
+    {"field": "currency", "header_contains": "Ccy", "kind": "text"},
+    {"field": "trade_date", "header_contains": "Trade Date", "kind": "date"},
+    {"field": "expiry", "header_contains": "Maturity Date", "kind": "date"},
+    {"field": "underlying", "header_contains": "Underlying RIC", "kind": "text"},
+    {"field": "underlying_price", "header_contains": "Underlying Level", "kind": "number"},
+    {"field": "put_call", "header_contains": "Put / Call", "kind": "text"},
+    {"field": "quantity", "header_contains": "Quantity", "kind": "number",
+     "fallback_header_contains": "Notional", "fallback_is_signed": true},
+    {"field": "strike", "header_contains": "Strike Rate", "kind": "number"}
+  ],
+  "direction": {
+    "mode": "column",
+    "header_contains": "Short / Long",
+    "short_values": ["short", "sell", "s"]
+  },
+  "valuation_date": {
+    "mode": "regex",
+    "pattern": "close of business\\s+(\\d{1,2}\\s+[A-Za-z]+\\s+\\d{4})"
+  }
+}

@@ -34,13 +34,41 @@ CANONICAL_INDICES: dict[str, str | None] = {
 
 _BY_FOLDED = {name.casefold(): name for name in CANONICAL_INDICES}
 
+# Values brokers write into an "underlying" column that name the PRODUCT, not
+# the index. Verified: Nomura's Aug-2026 statement puts "Compound" in
+# ``underlying`` on exactly the 12 rows whose ``productType`` is also
+# "Compound". Passing that through produces a row whose Index reads "Compound",
+# which then fails every index-price lookup while looking like a real name --
+# worse than a blank, because a blank is visibly missing.
+_NOT_INDEX_NAMES = frozenset({
+    "compound",
+    "exoticoption",
+    "exotic option",
+    "option",
+    "notapplicable",
+    "not applicable",
+    "n/a",
+    "na",
+    "none",
+})
+
+
+def is_index_name(raw: str | None) -> bool:
+    """False for blanks and for product-type values that are not index names."""
+    cleaned = " ".join(str(raw or "").split())
+    return bool(cleaned) and cleaned.casefold() not in _NOT_INDEX_NAMES
+
 
 def canonicalize_index(raw: str) -> str:
     """Return the canonical spelling for a raw index name.
 
     Unknown names are returned cleaned (trimmed) but otherwise untouched --
     never guessed -- so new indices flow through visibly rather than being
-    silently renamed.
+    silently renamed. Product-type values (see _NOT_INDEX_NAMES) are rejected to
+    an empty string: they are not indices, and leaving them in makes a
+    populated-looking Index column that can never price.
     """
     cleaned = " ".join(raw.split())
+    if not is_index_name(cleaned):
+        return ""
     return _BY_FOLDED.get(cleaned.casefold(), cleaned)

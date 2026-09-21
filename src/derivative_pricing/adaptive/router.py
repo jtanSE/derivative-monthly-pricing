@@ -54,6 +54,12 @@ class RouteResult:
     spec: ParserSpec | None = None
     marks: list[BrokerMark] = field(default_factory=list)
     candidates: list[str] = field(default_factory=list)  # broker names if ambiguous
+    # Why the file could not be read at all (encrypted, corrupt, wrong format).
+    # Distinct from status="unknown" with no error, which means "read fine, but
+    # no spec recognizes this layout" -- the two need opposite remedies, so a
+    # caller must be able to tell them apart. An encrypted file cannot be
+    # onboarded no matter how many specs you draft.
+    error: str | None = None
 
     @property
     def broker(self) -> str | None:
@@ -87,6 +93,7 @@ def route_folder(folder: Path | str, specs: list[ParserSpec] | None = None) -> l
         if path.suffix.lower() in (".xls", ".xlsx") and not path.name.startswith("~$"):
             try:
                 results.append(route(path, specs))
-            except Exception as e:
-                results.append(RouteResult(str(path), "unknown", candidates=[f"error: {e}"]))
+            except Exception as e:  # noqa: BLE001 -- one bad file must not kill the run
+                results.append(RouteResult(str(path), "unknown",
+                                           candidates=[f"error: {e}"], error=str(e)))
     return results

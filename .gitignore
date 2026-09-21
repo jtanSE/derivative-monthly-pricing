@@ -18,3 +18,17 @@ data/*/
 # Excel lock files
 ~$*.xls
 ~$*.xlsx
+
+# Secrets & local config — never commit. API keys (ANTHROPIC_API_KEY, Bloomberg
+# HAPI) and any Streamlit secrets are injected from the environment at deploy.
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+
+# Local runtime state — the AI-onboarding token/cost meter's running totals.
+# Per-machine, not source; regenerated on first use.
+data/usage_totals.json
+
+# Security write-ups are kept local, not published to the code remote.
+SECURITY-*.md

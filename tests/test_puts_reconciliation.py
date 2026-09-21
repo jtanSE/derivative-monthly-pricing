@@ -33,10 +33,10 @@ REPO = Path(__file__).resolve().parents[1]
 
 # (ALIC broker section, statement filename)
 BROKER_FILES = [
-    (Broker.BNP_PARIBAS, "BNP AUGUSTAR LIFE INSURANCE COMPANY_01 Apr 2026 (2).xls"),
-    (Broker.BAML, "BAML 03-31-2026_Results_82654.xls"),
-    (Broker.GOLDMAN_SACHS, "GS_Ohio National Life Ins Co (EQ)_20260331.xls"),
-    (Broker.HSBC, "HSBC GV_AUGUSTAR LIFE INSURANCE COMPANY REG15_31Mar2026_070407.xlsx"),
+    (Broker.BNP_PARIBAS, "data/2026-03/BNP AUGUSTAR LIFE INSURANCE COMPANY_01 Apr 2026 (2).xls"),
+    (Broker.BAML, "data/2026-03/BAML 03-31-2026_Results_82654.xls"),
+    (Broker.GOLDMAN_SACHS, "data/2026-03/GS_Ohio National Life Ins Co (EQ)_20260331.xls"),
+    (Broker.HSBC, "data/2026-03/HSBC GV_AUGUSTAR LIFE INSURANCE COMPANY REG15_31Mar2026_070407.xlsx"),
 ]
 
 

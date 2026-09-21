@@ -213,12 +213,12 @@ class BacktestMonth:
 # March 2026 is the sample that ships in the repo root; future months are dropped
 # into data/backtests/<as-of>/ (git-ignored) as they are confirmed.
 _MARCH_2026 = (
-    "ALIC MTM Prices for Call Options Test - 31 March 2026.xls",
+    "data/2026-03/ALIC MTM Prices for Call Options Test - 31 March 2026.xls",
     [
-        "BNP AUGUSTAR LIFE INSURANCE COMPANY_01 Apr 2026 (2).xls",
-        "BAML 03-31-2026_Results_82654.xls",
-        "GS_Ohio National Life Ins Co (EQ)_20260331.xls",
-        "HSBC GV_AUGUSTAR LIFE INSURANCE COMPANY REG15_31Mar2026_070407.xlsx",
+        "data/2026-03/BNP AUGUSTAR LIFE INSURANCE COMPANY_01 Apr 2026 (2).xls",
+        "data/2026-03/BAML 03-31-2026_Results_82654.xls",
+        "data/2026-03/GS_Ohio National Life Ins Co (EQ)_20260331.xls",
+        "data/2026-03/HSBC GV_AUGUSTAR LIFE INSURANCE COMPANY REG15_31Mar2026_070407.xlsx",
     ],
 )
 

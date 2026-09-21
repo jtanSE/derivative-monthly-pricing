@@ -13,6 +13,12 @@ services:
       # "false" to turn the model off entirely (deterministic parsing of known
       # brokers is unaffected; unknown formats then require a hand-authored spec).
       - AI_ONBOARDING_ENABLED=${AI_ONBOARDING_ENABLED:-}
+      # Spend cap (USD) for the AI onboarding path -- a second, automatic kill
+      # switch. Once cumulative recorded spend reaches this, drafting is refused
+      # until the cap is raised. Unset/blank/<=0 = no cap. Enforced server-side
+      # in the backend; it is deliberately NOT a UI setting, so a browser user
+      # cannot raise it. Set it here (from the host env / secrets manager).
+      - AI_ONBOARDING_BUDGET_USD=${AI_ONBOARDING_BUDGET_USD:-}
       # Optional — a folder of statements to pre-load into the combined view.
       # If you mount a volume below, set this to its container path.
       - STATEMENTS_DIR=${STATEMENTS_DIR:-}

@@ -30,9 +30,13 @@ BROKER_MTM_SIGN[Broker.BARCLAYS] = -1
 BROKER_MTM_SIGN[Broker.NOMURA] = -1
 
 
-def apply_sign_convention(broker: Broker, mtm_as_reported: float) -> float:
-    """Convert a broker-reported MTM into the internal-view MTM (rule F3)."""
-    return BROKER_MTM_SIGN[broker] * mtm_as_reported
+def apply_sign_convention(broker: Broker, value: float) -> float:
+    """Convert a broker-reported value into the internal (client-view) value
+    under rule F3. Dealer-perspective brokers (Barclays, Nomura) report BOTH
+    their MTM and their position size negated relative to the client's view, so
+    the same multiplier converts either quantity — verified against the ALIC
+    sheet, where Nomura's shares are exactly -exchangedNotional1amount."""
+    return BROKER_MTM_SIGN[broker] * value
 
 
 class StatementParser(Protocol):

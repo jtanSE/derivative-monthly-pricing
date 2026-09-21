@@ -65,5 +65,9 @@
     "sign_of_field": null
   },
   "banner_prefixes": [],
-  "repeated_headers": false
+  "repeated_headers": false,
+  "valuation_date": {
+    "mode": "column",
+    "header_contains": "Mark Date"
+  }
 }

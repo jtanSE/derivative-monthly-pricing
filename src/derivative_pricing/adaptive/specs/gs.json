@@ -21,5 +21,10 @@
     "mode": "column",
     "header_contains": "B/ S",
     "short_values": ["short", "sell", "s"]
+  },
+  "valuation_date": {
+    "mode": "label",
+    "label_contains": "Valuation Date",
+    "value_offset": 1
   }
 }

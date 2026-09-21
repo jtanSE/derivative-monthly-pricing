@@ -3,6 +3,7 @@
   "sheet_name": "Option - Reg. MM",
   "header_anchor": "BNPP's ref",
   "repeated_headers": false,
+  "split_legs": true,
   "banner_prefixes": [],
   "columns": [
     {"field": "trade_ref", "header_contains": "BNPP's ref", "kind": "text"},
@@ -21,5 +22,9 @@
     "mode": "column",
     "header_contains": "Client Direction",
     "short_values": ["short", "sell", "s"]
+  },
+  "valuation_date": {
+    "mode": "regex",
+    "pattern": "close of business\\s+(\\d{1,2}\\s+[A-Za-z]+\\s+\\d{2,4})"
   }
 }

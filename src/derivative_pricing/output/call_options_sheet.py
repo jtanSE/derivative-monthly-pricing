@@ -28,6 +28,28 @@ COLUMNS = [
     "Shares", "Price (Ccy)", "Broker",
 ]
 
+# Leading characters that make a spreadsheet engine treat a *text* cell as a
+# formula (openpyxl stores a string starting with "=" as a live formula; Excel
+# also evaluates cells starting with +, -, @, or a leading tab/CR/LF on open).
+# Broker statements — and the free-text exclusion note — are untrusted input, so
+# a crafted trade ref like `=WEBSERVICE(...)`/`=cmd|'/c ...'!A1` would otherwise
+# execute when an analyst opens the generated workbook (CSV/formula injection).
+_FORMULA_TRIGGERS = ("=", "+", "-", "@", "\t", "\r", "\n")
+
+
+def _safe_cell(value):
+    """Neutralize spreadsheet-formula injection in text cells written to output.
+
+    Numbers, dates, None, and enums pass through untouched (a negative MTM is a
+    float, not a string, so it is never affected). Only a *string* beginning with
+    a formula trigger is defused, by prefixing a single quote so the engine keeps
+    it as literal text. Legitimate values in these columns (trade refs, index
+    names, currencies) never start with those characters, so display is unchanged
+    in practice — the guard bites only on hostile input."""
+    if isinstance(value, str) and value.startswith(_FORMULA_TRIGGERS):
+        return "'" + value
+    return value
+
 
 @dataclass
 class CallOptionsOutputRow:
@@ -44,6 +66,10 @@ class CallOptionsOutputRow:
     shares: float | None
     price_local: float | None
     broker: str | None = None  # for ALIC-style per-broker sectioning
+    # Set when the statement's quantity is NOT a share count (e.g. GS Asian
+    # options quote a notional): shares is left None so subtotals stay honest,
+    # and this note says why the row needs manual/traders-DB conversion.
+    shares_review: str | None = None
 
     def as_cells(self) -> list:
         return [
@@ -55,16 +81,79 @@ class CallOptionsOutputRow:
 
 
 def _signed_shares(quantity: float | None, direction: str | None) -> float | None:
-    """Signed position size: negative for short, positive otherwise.
+    """Signed position size from the statement's own perspective: negative for
+    short, positive for long.
 
-    Statements report quantity (N) as a positive magnitude plus a direction;
-    ALIC carries the sign on the shares themselves.
+    Statements report quantity (N) either as a positive magnitude plus a
+    direction (BNP/GS/HSBC/MS) or as an already-signed number (BAML). When an
+    explicit direction is known it is authoritative — magnitude from quantity,
+    sign from direction — so double-signed inputs can't flip twice. Without a
+    direction the quantity passes through as-is. The dealer→client flip for
+    Nomura/Barclays is applied separately (apply_sign_convention), same as MTM.
     """
     if quantity is None:
         return None
-    if direction and direction.strip().lower() == "short":
-        return -abs(quantity)
+    if direction:
+        d = direction.strip().lower()
+        if d == "short":
+            return -abs(quantity)
+        if d == "long":
+            return abs(quantity)
     return quantity
+
+
+# An equity-index option struck far below the index level (< 50, e.g. GS's
+# real $1.0 strikes) is a normalized/notional contract: its quantity column
+# holds a dollar notional, not a share count. Real index strikes are >> this.
+_RATIO_STRIKE_MAX = 50.0
+# A position more than this multiple of its broker's median |quantity| is
+# almost certainly a notional mis-booked as a quantity, not a real share count.
+# Calibrated to separate the two observed regimes cleanly: Nomura's mis-booked
+# notionals run ~20,000x the broker median, while legitimate large positions
+# top out far lower (Barclays' biggest real .BXIIGTBB position is ~190x). 1000x
+# sits well above every genuine position and well below the notional mis-books.
+_QTY_OUTLIER_MULTIPLE = 1000.0
+
+
+def _broker_qty_medians(marks: list[BrokerMark]) -> dict:
+    """Median |quantity| per broker, for the outlier guard below."""
+    import statistics
+
+    by_broker: dict = {}
+    for m in marks:
+        q = m.extra.get("quantity")
+        if q:
+            by_broker.setdefault(m.broker, []).append(abs(q))
+    return {b: statistics.median(v) for b, v in by_broker.items() if v}
+
+
+def _low_index_strike(m: BrokerMark) -> bool:
+    """True when an equity-index option carries a strike far below any real
+    index level (< 50). The strike itself is genuine (GS really does book these
+    at e.g. $1.0 / $1.0609) — it marks a NORMALIZED / notional-based contract,
+    where the statement's quantity is a dollar notional, not a share count.
+    Real index strikes are hundreds-to-thousands, so this cleanly isolates the
+    normalized structures."""
+    strike = m.extra.get("strike")
+    return isinstance(strike, (int, float)) and 0 < strike < _RATIO_STRIKE_MAX
+
+
+def _shares_review_reason(m: BrokerMark, qty_median: float | None) -> str | None:
+    """Why this row's quantity should NOT be summed as shares (else None).
+
+    Both cases are trades whose statement quantity is a notional, needing the
+    trade's fixing level (traders DB) to convert to a share count. The strike
+    is reported as-is either way — it is not the thing being flagged."""
+    if _low_index_strike(m):
+        strike = m.extra.get("strike")
+        return (f"normalized contract (strike {strike:g} << index level): the "
+                "statement quantity is a notional, converted to shares via the "
+                "trade's fixing level (traders DB)")
+    q = m.extra.get("quantity")
+    if q and qty_median and abs(q) > _QTY_OUTLIER_MULTIPLE * qty_median:
+        return (f"quantity {abs(q):,.0f} is >{_QTY_OUTLIER_MULTIPLE:g}x the broker "
+                f"median ({qty_median:,.0f}) — likely a notional, not shares")
+    return None
 
 
 def build_rows_from_marks(
@@ -80,20 +169,30 @@ def build_rows_from_marks(
     FX defaults to 1.0 for any currency not supplied (all USD in the BNP file).
     """
     index_prices = index_prices or {}
+    qty_medians = _broker_qty_medians(marks)
     rows: list[CallOptionsOutputRow] = []
     for m in marks:
         currency = (m.currency or "USD").upper()
         fx = fx_rates.get(currency, 1.0 if currency == "USD" else None)
 
-        # Apply the Long/Short sign to shares: the analyst's sheet stores short
-        # positions as negative shares (verified 251/253 vs ALIC). This flows
-        # through to notional and per-unit price, which both go negative for
-        # shorts. MTM keeps the sign the statement reports. The traders DB
-        # LongShort field is the authoritative source once matching is wired;
-        # here we use the statement's own Client Direction.
-        shares = _signed_shares(m.extra.get("quantity"), m.extra.get("direction"))
+        # Signed shares in the client view: magnitude+sign from the statement's
+        # own direction, then the F3 dealer flip so Nomura/Barclays (which
+        # report position size negated, exactly like their MTM) land on the
+        # client's side. Verified against ALIC: Nomura shares == -exchNotl1.
+        # A row whose quantity is really a NOTIONAL (ratio-strike trades; wild
+        # magnitude outliers) is flagged instead of summed, since converting it
+        # needs per-trade terms not on the statement.
+        shares_review = _shares_review_reason(m, qty_medians.get(m.broker))
+        if shares_review is not None:
+            shares = None
+        else:
+            signed = _signed_shares(m.extra.get("quantity"), m.extra.get("direction"))
+            shares = apply_sign_convention(m.broker, signed) if signed is not None else None
         raw_index = m.extra.get("underlying")
-        index_name = canonicalize_index(raw_index) if raw_index else None
+        # canonicalize_index returns "" for product-type values ("Compound"),
+        # which are not index names; normalize that to None so the column reads
+        # as genuinely absent rather than empty-but-present.
+        index_name = (canonicalize_index(raw_index) or None) if raw_index else None
         index_price = index_prices.get(index_name) if index_name else None
         if index_price is None:
             index_price = m.extra.get("underlying_price")
@@ -111,7 +210,7 @@ def build_rows_from_marks(
                 cusip=None,  # CUSIP comes from the traders DB join (not yet wired)
                 index=index_name,
                 trade_reference=m.trade_ref,
-                strike_rate=m.extra.get("strike"),
+                strike_rate=m.extra.get("strike"),  # shown as reported (a $1.0 strike is real)
                 maturity_date=m.extra.get("expiry"),
                 currency=currency,
                 notional_local=notl,
@@ -121,9 +220,27 @@ def build_rows_from_marks(
                 shares=shares,
                 price_local=price,
                 broker=m.broker.value,
+                shares_review=shares_review,
             )
         )
     return rows
+
+
+def valuation_review(row: "CallOptionsOutputRow") -> str | None:
+    """Narrow flag: a call we can neither value nor identify.
+
+    A row is flagged only when it has NO strike, NO computable per-unit price,
+    AND no recognized underlying/index — i.e. nothing to price it by and nothing
+    to identify it as. This deliberately does NOT flag structured-index trades
+    (e.g. Barclays `.BXIIGTBB`), which legitimately carry no strike/shares but
+    ARE identified by their index and valued straight off MTM — those are a
+    normal product class, not an anomaly. The MTM is kept regardless; this is a
+    review hint, not an exclusion.
+    """
+    has_index = bool((row.index or "").strip())
+    if row.strike_rate is None and row.price_local is None and not has_index:
+        return "no strike, price, or underlying — cannot value or identify this row"
+    return None
 
 
 def option_type(mark: BrokerMark) -> str:
@@ -183,7 +300,7 @@ def write_call_options_xlsx(
 
     for i, row in enumerate(rows, start=header_row + 1):
         for c, val in enumerate(row.as_cells(), start=1):
-            ws.cell(row=i, column=c, value=val)
+            ws.cell(row=i, column=c, value=_safe_cell(val))
 
     # widen columns a little
     for c in range(1, len(COLUMNS) + 1):
@@ -202,7 +319,17 @@ def _subtotal_cells(rows: list[CallOptionsOutputRow], label: str) -> list:
     and shares are POSITIVE-ONLY sums (short legs excluded); MTM is a plain sum.
     Per-unit price is left blank (not meaningful at the aggregate)."""
     def pos(vals):
-        return sum(v for v in vals if v is not None and v > 0)
+        present = [v for v in vals if v is not None]
+        # When NO row in the section carried this value, report it absent rather
+        # than as 0. Goldman and Nomura can produce a whole section with no
+        # notional (no index price to multiply by), and a "0.00" subtotal reads
+        # as "these positions are worth nothing" -- a different and wrong claim
+        # from "this could not be computed". A blank cannot be mistaken for a
+        # control total; a zero silently can, and rolls up into the grand total
+        # looking complete.
+        if not present:
+            return None
+        return sum(v for v in present if v > 0)
 
     def tot(vals):
         return sum(v for v in vals if v is not None)
@@ -259,7 +386,7 @@ def write_call_options_sectioned_xlsx(
         rr = header_r + 1
         for row in broker_rows:
             for c, val in enumerate(row.as_cells(), start=1):
-                ws.cell(row=rr, column=c, value=val)
+                ws.cell(row=rr, column=c, value=_safe_cell(val))
             rr += 1
         sub = _subtotal_cells(broker_rows, f"{broker} subtotal")
         for c, val in enumerate(sub, start=1):
@@ -277,6 +404,18 @@ def write_call_options_sectioned_xlsx(
              col_sum(6), col_sum(7), col_sum(8), col_sum(9), col_sum(10), None]
     for c, val in enumerate(grand, start=1):
         ws.cell(row=r_idx, column=c, value=val).font = bold
+
+    # Say so when the notional total is incomplete. Without this the grand
+    # total looks like a control total while excluding whole brokers, and the
+    # only clue is a blank subtotal several hundred rows up.
+    no_notional = [b for b, rs in groups.items()
+                   if all(r.notional_usd is None for r in rs)]
+    if no_notional and len(no_notional) < len(groups):
+        ws.cell(row=r_idx + 1, column=1,
+                value=(f"NOTE: Notional excludes {', '.join(sorted(no_notional))} "
+                       f"({len(no_notional)} of {len(groups)} sections) -- no index price "
+                       f"available, so no notional could be computed. MTM is complete.")
+                ).font = bold
 
     for c in range(1, len(COLUMNS) + 1):
         ws.column_dimensions[chr(64 + c)].width = 16
