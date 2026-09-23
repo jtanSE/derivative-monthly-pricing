@@ -9,3 +9,9 @@ borderColor = "#e1e0d9"
 
 [browser]
 gatherUsageStats = false
+
+[server]
+# Local-only. The app is reachable from this machine and nowhere else, so
+# broker statements are never served to the wider network. Override only for
+# a deliberate, authenticated deployment (see the Dockerfile).
+address = "127.0.0.1"
