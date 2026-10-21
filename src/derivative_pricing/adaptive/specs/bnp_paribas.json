@@ -1,0 +1,115 @@
+{
+  "broker": "BNP Paribas",
+  "sheet_name": "Sheet1",
+  "header_anchor": "BNPP's ref",
+  "header_requires": [],
+  "columns": [
+    {
+      "field": "trade_ref",
+      "header_contains": "BNPP's ref",
+      "kind": "text",
+      "fallback_header_contains": null,
+      "fallback_is_signed": false
+    },
+    {
+      "field": "mtm_local",
+      "header_contains": "(N*P) *",
+      "kind": "number",
+      "fallback_header_contains": null,
+      "fallback_is_signed": false
+    },
+    {
+      "field": "mid_price",
+      "header_contains": "Mark to Market per Option (P)",
+      "kind": "number",
+      "fallback_header_contains": null,
+      "fallback_is_signed": false
+    },
+    {
+      "field": "currency",
+      "header_contains": "Currency",
+      "kind": "text",
+      "fallback_header_contains": null,
+      "fallback_is_signed": false
+    },
+    {
+      "field": "trade_date",
+      "header_contains": "Trade Date",
+      "kind": "date",
+      "fallback_header_contains": null,
+      "fallback_is_signed": false
+    },
+    {
+      "field": "expiry",
+      "header_contains": "Expiration date",
+      "kind": "date",
+      "fallback_header_contains": null,
+      "fallback_is_signed": false
+    },
+    {
+      "field": "underlying",
+      "header_contains": "Underlying",
+      "kind": "text",
+      "fallback_header_contains": null,
+      "fallback_is_signed": false
+    },
+    {
+      "field": "bloomberg_code",
+      "header_contains": "Bloom Code",
+      "kind": "text",
+      "fallback_header_contains": null,
+      "fallback_is_signed": false
+    },
+    {
+      "field": "underlying_price",
+      "header_contains": "Underlying price",
+      "kind": "number",
+      "fallback_header_contains": null,
+      "fallback_is_signed": false
+    },
+    {
+      "field": "put_call",
+      "header_contains": "Call/ Put",
+      "kind": "text",
+      "fallback_header_contains": null,
+      "fallback_is_signed": false
+    },
+    {
+      "field": "quantity",
+      "header_contains": "Number of options (N)",
+      "kind": "number",
+      "fallback_header_contains": null,
+      "fallback_is_signed": false
+    },
+    {
+      "field": "strike",
+      "header_contains": "Strike",
+      "kind": "number",
+      "fallback_header_contains": null,
+      "fallback_is_signed": false
+    }
+  ],
+  "direction": {
+    "mode": "column",
+    "header_contains": "Client Direction",
+    "short_values": [
+      "short",
+      "sell",
+      "s"
+    ],
+    "sign_of_field": null
+  },
+  "banner_prefixes": [],
+  "repeated_headers": false,
+  "row_filter": null,
+  "multi_table": false,
+  "split_legs": true,
+  "valuation_date": {
+    "mode": "regex",
+    "header_contains": null,
+    "label_contains": null,
+    "value_offset": 1,
+    "pattern": "close of business\\s+(\\d{1,2}\\s+[A-Za-z]+\\s+\\d{2,4})",
+    "search_rows": 60
+  }
+}

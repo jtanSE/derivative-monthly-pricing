@@ -9,18 +9,23 @@ someone to help with the one-time setup in Part 1.
 
 ---
 
-## Part 1 — One-time setup (you will need help with this)
+## Part 1 — One-time setup
 
-Someone technical, or your IT team, needs to do these two things once. After
-that you never have to think about them again.
+**1. Install `uv`.** This is a small helper program the tool relies on — the
+only thing you must install. It goes into your own user folder and does not
+need administrator rights. It brings its own copy of Python, so there is
+nothing else to install.
 
-**1. Install `uv`.** This is a small helper program the tool relies on. It
-installs into your own user folder and does not need administrator rights.
+**2. Restart the computer.** This step is not optional and it is the single
+most common reason the tool fails to start. Installing `uv` does not make it
+visible to programs that were already running, and Windows Explorer — which
+is what launches the tool when you double-click it — is one of them. A
+restart fixes this permanently.
 
-**2. Install Claude Code and sign in.** This is only needed so the tool can
-handle broker formats it has never seen before. Signing in to the Claude Code
-extension in VS Code is enough — the tool finds it automatically. Everything
-else works without it.
+**3. (Optional) Install Claude Code and sign in.** This is only needed so the
+tool can handle broker formats it has never seen before. Signing in to the
+Claude Code extension in VS Code is enough — the tool finds it automatically.
+Everything else works without it.
 
 > If your Claude sign-in is a **personal** subscription rather than a company
 > one, mention that to whoever set this up before you use the new-broker
@@ -30,15 +35,32 @@ else works without it.
 
 ## Part 2 — Getting the tool onto your computer
 
-**Recommended: GitHub Desktop.** Ask to be added to the project, then install
-GitHub Desktop and use it to download the project folder. The advantage is
-that when the tool is improved, you click one **Pull** button to get the
-update — no files to re-copy.
+You will be sent a single `.zip` file. Three steps, in this order:
 
-**Alternative: a copied folder.** Someone can send you the folder directly.
-This works, but you will not get fixes automatically, and over time your
-version can produce different numbers from everyone else's. Prefer GitHub
-Desktop if you can.
+**1. Unblock it.** Right-click the `.zip` → **Properties** → tick **Unblock**
+at the bottom → **OK**. Windows marks files that arrived by email or Teams as
+untrusted and will silently refuse to run the launcher inside. Do this
+*before* extracting — unblocking the zip covers everything inside it.
+
+**2. Extract it somewhere with a short path.** Right-click → **Extract All**.
+In the box that appears, **delete the folder name Windows suggests on the end**
+so you do not end up with a folder inside a folder of the same name. Good
+places:
+
+- `C:\pricing-tool`
+- `C:\Users\<your name>\Documents`
+
+Do **not** extract into OneDrive, Teams, or a deeply nested Downloads folder.
+Those paths are long on their own, and the tool needs room underneath itself
+for the components it installs. The launcher checks this and will tell you if
+the folder is too deep.
+
+**3. Open the extracted folder** and continue to Part 3.
+
+> **Updates:** because this arrived as a zip rather than through GitHub, you
+> will not get fixes automatically. When a new version is sent to you, delete
+> the old folder and repeat Part 2. Running an old copy is how two people end
+> up with different numbers for the same month.
 
 ---
 
@@ -79,10 +101,13 @@ choose to onboard one. The regular monthly run never sends anything anywhere.
 
 ## If you get stuck
 
-The black window's message is the useful thing to report — copy it and send it
-on. Two common ones:
+If the window shows a message and then closes, **do not worry about catching
+it** — the same message is saved to a file called `SETUP-PROBLEM.txt` in the
+project folder. Send that file on. That is all anyone needs to diagnose it.
 
-| Message mentions | What it means |
-|---|---|
-| `uv is not installed` | Part 1 was not completed on this computer. |
-| `failed at the uv sync step` | It could not download what it needs. Connect to the VPN and try again. |
+| Message mentions | What it means | What to do |
+|---|---|---|
+| `One-time setup is needed` | Windows cannot see `uv` yet. | Restart the computer and try again. If it persists, `uv` needs reinstalling. |
+| `buried too deep on the disk` | The folder path is too long. | Move the whole folder to `C:\pricing-tool` and try again. |
+| `failed at the uv sync step` | It could not download what it needs. | Connect to the VPN and try again. |
+| `The tool could not start` | Components installed, but the app itself errored. | Send a photo of the window plus `SETUP-PROBLEM.txt`. |

@@ -12,6 +12,7 @@ The actual files are parsed via the router -- never screenshots.
 
 from __future__ import annotations
 
+import shutil
 import sys
 import tempfile
 import uuid
@@ -53,7 +54,7 @@ from derivative_pricing.output.exclusions import (
 )
 from derivative_pricing.recon import section_totals
 
-st.set_page_config(page_title="Derivative MTM Parser", page_icon="📄", layout="wide")
+st.set_page_config(page_title="Derivative Month-End Valuation", layout="wide")
 # One id per script execution (i.e. per drag/drop or click) — used by the
 # token meter to group usage into "runs".
 st.session_state["run_id"] = uuid.uuid4().hex
@@ -66,19 +67,55 @@ st.markdown(
           border-radius: 12px;
           background: #fcfcfb;
       }
-      .block-container { padding-top: 2.5rem; }
+      .block-container { padding-top: 2.2rem; max-width: 1500px; }
       footer { visibility: hidden; }
-      /* st.metric truncates rather than wraps; a smaller value face keeps
-         full month-end figures visible inside the tiles */
-      [data-testid="stMetricValue"] { font-size: 1.55rem; }
+
+      /* --- Stat tiles -------------------------------------------------------
+         Labels read as quiet field names, not headings. Values keep the font's
+         proportional figures: tabular-nums gives every digit a zero's width,
+         which makes a short figure look loose at display size. */
+      [data-testid="stMetricValue"] {
+          font-size: 1.5rem;
+          font-weight: 600;
+          letter-spacing: -0.015em;
+      }
+      [data-testid="stMetricLabel"] p {
+          font-size: 0.72rem;
+          font-weight: 600;
+          letter-spacing: 0.055em;
+          text-transform: uppercase;
+          color: rgba(11, 11, 11, 0.55);
+      }
+
+      /* --- Tables -----------------------------------------------------------
+         Figures in a column must align vertically, so these DO get tabular
+         figures -- the opposite of the stat tiles above. */
+      [data-testid="stDataFrame"] { font-variant-numeric: tabular-nums; }
+
+      /* --- Section headings -------------------------------------------------
+         The broker sections use h4; tighten them so a long page of sections
+         reads as a ledger rather than a stack of titles. */
+      .block-container h4 {
+          font-size: 1.05rem;
+          font-weight: 600;
+          letter-spacing: -0.01em;
+          padding-top: 0.1rem;
+      }
+
+      /* --- Tabs -------------------------------------------------------------
+         Default Streamlit tabs are low-contrast until selected, which makes the
+         two-step workflow hard to see from across a room. */
+      button[data-baseweb="tab"] { font-weight: 500; }
+      button[data-baseweb="tab"][aria-selected="true"] { font-weight: 650; }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-st.title("📄 Broker Statement Parser")
-st.caption("Known formats parse instantly; new ones are flagged for onboarding. "
-           "The actual files are parsed — no screenshots.")
+st.title("Derivative Month-End Valuation")
+st.caption("Broker statements in, the month-end valuation sheet out. Known formats "
+           "parse on drop; an unfamiliar one is drafted for your approval before it "
+           "is ever used. Figures are read from the statement files themselves.")
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
@@ -90,7 +127,7 @@ st.session_state["trade_search_put_hits"] = 0
 
 _HIGHLIGHT = "background-color: rgba(42, 120, 214, 0.18)"  # search-hit (blue)
 _ANOMALY = "background-color: rgba(250, 178, 25, 0.16)"    # possible-anomaly (amber)
-_FLAG_COL = "⚠"  # leading marker column; ⚠️ on flagged rows, blank otherwise
+_FLAG_COL = "⚠"  # leading marker column; set on flagged rows, blank otherwise
 
 # Scrolls the main page to the anchor rendered above the matched broker
 # section. Runs from a zero-height component iframe, so it walks up to the
@@ -224,13 +261,41 @@ def _record_usage(usage: dict | None) -> None:
     run["cost"] += usage["cost_usd"]
 
 
+def _start_over() -> None:
+    """Reset the screen to a blank session: no files, default date, no search.
+
+    Runs as a button callback, i.e. BEFORE the next script run, so every widget
+    is rebuilt from scratch. A file uploader cannot be emptied by writing to its
+    session-state key, so the uploaders' keys carry a generation number; bumping
+    it hands Streamlit brand-new, empty widgets.
+
+    Deliberately untouched: anything saved to disk -- approved broker formats,
+    trade exclusions, and the AI cost totals. Those are decisions, not screen
+    state, and must survive a reset.
+    """
+    gen = st.session_state.get("_upload_gen", 0) + 1
+    old_tmp = st.session_state.get("_tmpdir")
+    for k in list(st.session_state.keys()):
+        del st.session_state[k]
+    st.session_state["_upload_gen"] = gen
+    # The dropped statements were copied to a per-session temp folder; remove
+    # them so broker data doesn't linger on disk after the user starts over.
+    if old_tmp:
+        shutil.rmtree(old_tmp, ignore_errors=True)
+
+
 def _render_sidebar() -> None:
     with st.sidebar:
+        st.button("Start over", on_click=_start_over, width="stretch",
+                  help="Clears the dropped statements, the date and the search so "
+                       "you can begin a fresh run. Approved broker formats and "
+                       "saved exclusions are kept.")
+        st.divider()
         st.subheader("Find a trade")
         query = st.text_input(
             "Trade reference ID", key="trade_search",
             placeholder="Full or partial ID",
-            help="Searches the Month-end combined view. The matching row is "
+            help="Searches the Month-end close view. The matching row is "
                  "highlighted and its broker section scrolled into view.",
         ).strip()
         if query:
@@ -248,7 +313,7 @@ def _render_sidebar() -> None:
                     st.session_state["trade_search_last_snap"] = query.casefold()
                     components.html(_SNAP_JS, height=0)
             elif put_hits:
-                st.info(f"{put_hits} match(es) in the **Put Options** sheet — "
+                st.info(f"{put_hits} match(es) in the **Put options** sheet — "
                         "included in the puts download, not shown on screen.")
             else:
                 st.warning("No match in the loaded statements.")
@@ -263,17 +328,17 @@ def _render_sidebar() -> None:
         else:
             st.caption("None yet — drop a statement to onboard the first one.")
         st.caption("Statements from these brokers parse instantly. Anything else "
-                   "is routed to the onboarding agent for review.")
+                   "gets a parser drafted for your review.")
 
         st.divider()
-        st.subheader("AI token usage")
+        st.subheader("AI usage and cost")
         totals = load_usage_totals()
         run = st.session_state.get("usage_last_run") or {"tokens": 0, "cost": 0.0}
         # plain text rows (not st.metric): the sidebar is too narrow for metric
         # tiles, which truncate instead of wrapping
         st.markdown(f"**Last run** — {run['tokens']:,} tokens · ${run['cost']:,.4f}")
         st.markdown(f"**All time** — {totals['total_tokens']:,} tokens · "
-                    f"${totals['total_cost_usd']:,.4f}")
+                    f"${totals['total_cost_usd']:,.2f}")
         # Spend kill switch status (read-only mirror of a server-side env var --
         # this is a display, not a control; the cap can't be changed from here).
         exhausted, cap, spent = budget_status()
@@ -286,9 +351,9 @@ def _render_sidebar() -> None:
                 st.progress(min(spent / cap, 1.0),
                             text=f"Budget ${spent:,.2f} / ${cap:,.2f} "
                                  f"(${remaining:,.2f} left)")
-        st.caption("Tokens are spent only when the onboarding agent drafts a "
-                   "parser spec for a NEW broker format. Deterministic parsing "
-                   "of known formats uses zero tokens.")
+        st.caption("AI is used only to draft a parser for a broker format the "
+                   "tool has not seen before. The monthly run on known formats "
+                   "uses no AI and costs nothing.")
 
 
 def _halt() -> None:
@@ -374,9 +439,9 @@ def _flagged_dataframe(table_rows, warns, *, column_config, height,
     search hit, amber for a possible anomaly. Anomaly reasons are surfaced
     separately (see _anomaly_panel) since a cell can't carry a tooltip."""
     if not table_rows:
-        st.dataframe(table_rows, use_container_width=True, hide_index=True)
+        st.dataframe(table_rows, width="stretch", hide_index=True)
         return
-    rows = [{_FLAG_COL: ("⚠️" if w else ""), **row}
+    rows = [{_FLAG_COL: ("⚠" if w else ""), **row}
             for row, w in zip(table_rows, warns)]
     df = pd.DataFrame(rows)
     flags = [bool(w) for w in warns]
@@ -392,7 +457,7 @@ def _flagged_dataframe(table_rows, warns, *, column_config, height,
                _FLAG_COL, width="small",
                help="Possible anomaly — parsed OK, but a value looks off vs its "
                     "peers. See the anomalies panel below the table.")}
-    st.dataframe(df.style.apply(_style, axis=1), use_container_width=True,
+    st.dataframe(df.style.apply(_style, axis=1), width="stretch",
                  height=height, hide_index=True, column_config=cfg)
 
 
@@ -400,13 +465,13 @@ def _anomaly_panel(label, refs, warns):
     """Expander listing each flagged row and why. Returns the flagged count."""
     flagged = [(ref, "; ".join(w)) for ref, w in zip(refs, warns) if w]
     if flagged:
-        with st.expander(f"⚠️ Possible anomalies in {label} ({len(flagged)})"):
+        with st.expander(f"Possible anomalies in {label} ({len(flagged)})"):
             st.caption("These rows parsed fine but carry a value that looks "
                        "unusual next to its peers — worth an eyeball, not "
                        "necessarily wrong.")
             st.dataframe([{"Reference": ref, "Why flagged": why}
                           for ref, why in flagged],
-                         use_container_width=True, hide_index=True)
+                         width="stretch", hide_index=True)
     return len(flagged)
 
 
@@ -433,7 +498,7 @@ def _valuation_flag_panel(broker: str, broker_rows) -> int:
     flagged = [(r, valuation_review(r)) for r in broker_rows]
     flagged = [(r, why) for r, why in flagged if why]
     if flagged:
-        with st.expander(f"❓ Cannot value or identify ({len(flagged)})"):
+        with st.expander(f"Cannot value or identify ({len(flagged)})"):
             st.caption("No strike, no per-unit price, and no underlying — kept "
                        "(MTM stands), but there's nothing to price or identify them "
                        "by. Structured-index trades (e.g. .BXIIGTBB) are NOT here — "
@@ -442,7 +507,7 @@ def _valuation_flag_panel(broker: str, broker_rows) -> int:
                 [{"Trade Reference": r.trade_reference,
                   "MTM (Ccy)": None if r.mtm_local is None else round(r.mtm_local, 2),
                   "Why flagged": why} for r, why in flagged],
-                use_container_width=True, hide_index=True)
+                width="stretch", hide_index=True)
     return len(flagged)
 
 
@@ -451,7 +516,7 @@ def _exclusions_panel(broker: str, kept_rows, excluded_rows, scope: str = "") ->
     overrides. Excluded trades are already out of the section, subtotal, and
     download; here the user adds to / restores from that list."""
     n = len(excluded_rows)
-    label = f"🚫 Excluded from this sheet ({n})" if n else "🚫 Exclude a trade"
+    label = f"Excluded from this sheet ({n})" if n else "Exclude a trade"
     with st.expander(label):
         st.caption("Trades removed from this broker's section, its F7 subtotal, and "
                    "the download — the parser-layer analogue of an analyst's manual "
@@ -476,7 +541,7 @@ def _exclusions_panel(broker: str, kept_rows, excluded_rows, scope: str = "") ->
                   "Reason": (exmap.get(str(r.trade_reference)) or {}).get("note") or "—",
                   "Excluded at": (exmap.get(str(r.trade_reference)) or {}).get("at") or "—"}
                  for r in excluded_rows],
-                use_container_width=True, hide_index=True)
+                width="stretch", hide_index=True)
             restore_pick = st.selectbox(
                 "Restore a trade reference",
                 ["—"] + [str(r.trade_reference) for r in excluded_rows],
@@ -501,7 +566,7 @@ def _drift_detail(spec, path: Path, display: str) -> None:
               "Still present?": "✓ yes" if c.resolved else "✗ MISSING",
               "Matched column header": c.matched_header or "—"}
              for c in rep.columns],
-            use_container_width=True, hide_index=True,
+            width="stretch", hide_index=True,
         )
 
 
@@ -516,10 +581,11 @@ def _render_spec_proposal(display: str, path: Path, *, reonboard: bool = False) 
 
     The drafted spec is cached in session_state so button-click reruns never
     re-invoke the model (and never re-spend tokens)."""
-    verb = "re-drafting an updated" if reonboard else "drafting a"
+    verb = "drafting an updated" if reonboard else "drafting a"
     cache_key = f"{'reonboard' if reonboard else 'onboard'}::{display}"
     if cache_key not in st.session_state:
-        with st.spinner(f"🤖 Onboarding agent {verb} parser spec for `{display}` …"):
+        with st.spinner(f"Reading the layout of `{display}` and {verb} parser for "
+                        "your review…"):
             st.session_state[cache_key] = onboard_file(path, force=reonboard)
         _record_usage(st.session_state[cache_key].usage)
     res = st.session_state[cache_key]
@@ -540,7 +606,7 @@ def _render_spec_proposal(display: str, path: Path, *, reonboard: bool = False) 
     v = res.validation
     badge = ":orange-badge[UPDATED SPEC — NOT YET SAVED]" if reonboard \
         else ":orange-badge[PROPOSED]"
-    st.success(f"🆕 Spec {'re-' if reonboard else ''}drafted for **{res.broker}** and validated — "
+    st.success(f"Spec {'re-' if reonboard else ''}drafted for **{res.broker}** and validated — "
                f"{v.rows_parsed} rows · {v.pct_with_quantity:.0%} with quantity · "
                f"{v.pct_with_strike:.0%} with strike.")
     marks = run_spec(res.spec, path)
@@ -549,20 +615,20 @@ def _render_spec_proposal(display: str, path: Path, *, reonboard: bool = False) 
     with st.container(border=True):
         st.markdown(f"#### {res.broker} — {len(preview_rows)} trades  {badge}")
         st.caption("Preview only — nothing is saved until you confirm below.")
-        st.dataframe(_rows_table(preview_rows), use_container_width=True, height=240,
+        st.dataframe(_rows_table(preview_rows), width="stretch", height=240,
                      hide_index=True, column_config=_ROWS_COLUMNS)
         if preview_rows:
             t = section_totals(preview_rows)
             st.markdown(f"**{res.broker} subtotal (preview)** — "
                         f"MTM (Ccy): **{t.mtm_local:,.2f}** · Shares: **{t.shares:,.2f}**")
         if put_marks:
-            st.caption(f"➕ {len(put_marks)} put option(s) will route to the Put Options "
+            st.caption(f"{len(put_marks)} put option(s) will route to the Put Options "
                        "sheet once saved.")
         with st.expander("Drafted parser spec (JSON)"):
             st.code(res.spec.model_dump_json(indent=2), language="json")
 
         if reonboard:
-            label = f"✅ Confirm — this IS the new {res.broker} format, update the parser"
+            label = f"Confirm the new {res.broker} layout and update the parser"
             if st.button(label, key=f"confirm::{cache_key}", type="primary"):
                 saved, backup = update_spec(res.spec)
                 del st.session_state[cache_key]
@@ -573,7 +639,7 @@ def _render_spec_proposal(display: str, path: Path, *, reonboard: bool = False) 
             st.caption("Not a format change? Close this without confirming and the "
                        "existing spec stays in force.")
         else:
-            if st.button(f"✅ Approve & save the {res.broker} parser",
+            if st.button(f"Approve and save the {res.broker} parser",
                          key=f"approve::{cache_key}", type="primary"):
                 try:
                     saved = save_spec(res.spec)
@@ -628,26 +694,26 @@ def _render_option_sheet(kind: str, marks, *, as_of: str, exclusions: dict,
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Brokers", len(groups), border=True)
     c2.metric(f"{kind} trades", len(rows), border=True)
-    c3.metric("Grand MTM (Ccy)", _compact(gt_mtm), border=True, help=f"{gt_mtm:,.2f}")
-    c4.metric("Grand Shares", _compact(gt_shares), border=True, help=f"{gt_shares:,.2f}")
+    c3.metric("Total MTM (local ccy)", _compact(gt_mtm), border=True, help=f"{gt_mtm:,.2f}")
+    c4.metric("Total shares", _compact(gt_shares), border=True, help=f"{gt_shares:,.2f}")
 
     review = _review_table(rows)
     if review:
-        st.warning(f"⚠️ {len(review)} trade(s) excluded from the Shares subtotal — "
+        st.warning(f"{len(review)} trade(s) excluded from the Shares subtotal — "
                    "their statement quantity is a notional, not a share count "
                    "(needs trade-terms/traders-DB conversion). MTM is unaffected.")
         with st.expander(f"Shares needing conversion ({len(review)})"):
-            st.dataframe(review, use_container_width=True, hide_index=True)
+            st.dataframe(review, width="stretch", hide_index=True)
     if excluded_rows:
-        st.info(f"🚫 {len(excluded_rows)} trade(s) manually excluded from the sheet "
+        st.info(f"{len(excluded_rows)} trade(s) manually excluded from the sheet "
                 "and totals (see each broker's *Excluded* panel to review or restore).")
 
     out_path = Path(tempfile.gettempdir()) / f"{kind.lower()}_options_{as_of}.xlsx"
     write_call_options_sectioned_xlsx(rows, out_path, as_of=as_of, sheet_label=sheet_label)
-    st.download_button(f"⬇ {sheet_label} .xlsx ({len(rows)} trades)",
+    st.download_button(f"Download {sheet_label} — {len(rows)} trades (.xlsx)",
                        out_path.read_bytes(),
                        file_name=f"{kind.lower()}_options_{as_of}.xlsx",
-                       mime=XLSX_MIME, type="primary", use_container_width=True)
+                       mime=XLSX_MIME, type="primary", width="stretch")
 
     st.divider()
     section_brokers = list(groups) + [b for b in excluded_groups if b not in groups]
@@ -667,7 +733,7 @@ def _render_option_sheet(kind: str, marks, *, as_of: str, exclusions: dict,
         n_flag = sum(1 for w in warns if w)
         with st.container(border=True):
             badge = f"  :orange-badge[⚠ {n_flag} flagged]" if n_flag else ""
-            excl_badge = (f"  :gray-badge[🚫 {len(broker_excluded)} excluded]"
+            excl_badge = (f"  :gray-badge[{len(broker_excluded)} excluded]"
                           if broker_excluded else "")
             st.markdown(f"#### {broker}  :blue-badge[{len(broker_rows)} trades]"
                         f"{badge}{excl_badge}")
@@ -676,7 +742,7 @@ def _render_option_sheet(kind: str, marks, *, as_of: str, exclusions: dict,
                 search_mask = pd.Series(
                     [query in str(r.trade_reference or "").casefold()
                      for r in display_rows])
-                st.caption(f"🔎 {int(search_mask.sum())} search match(es) floated to "
+                st.caption(f"{int(search_mask.sum())} search match(es) floated to "
                            "the top and highlighted.")
             if display_rows:
                 _flagged_dataframe(_rows_table(display_rows), warns,
@@ -700,14 +766,14 @@ def _render_option_sheet(kind: str, marks, *, as_of: str, exclusions: dict,
         g3.metric(f"{kind} trades", len(rows))
 
 
-single_tab, month_tab = st.tabs(["🔍 Single statement", "📅 Month-end combined (ALIC sheet)"])
+single_tab, month_tab = st.tabs(["Check one statement", "Month-end close"])
 
 # ----------------------------------------------------------------------------
 with single_tab:
     st.caption("Check how one statement parses before including it in the month-end run.")
     uploaded = st.file_uploader(
         "Drag a broker statement here — or click to browse",
-        type=["xls", "xlsx"], key="single",
+        type=["xls", "xlsx"], key=f"single_{st.session_state.get('_upload_gen', 0)}",
         help="Drag an .xls/.xlsx straight from your file explorer onto the box.",
     )
     if uploaded is None:
@@ -725,8 +791,8 @@ with single_tab:
 
         if len(matches) == 0:
             st.warning(f"**Unrecognized format** — {uploaded.name}. Drop it in the "
-                       "**Month-end combined** tab to run the onboarding agent "
-                       "and approve a new parser.")
+                       "**Month-end close** tab to draft a parser for it and "
+                       "approve it.")
         elif len(matches) > 1:
             st.warning(f"**Ambiguous** — matched {', '.join(m.broker.value for m in matches)}.")
         else:
@@ -739,10 +805,10 @@ with single_tab:
                 # Hard drift: a REQUIRED column is gone, so the saved spec can no
                 # longer parse this file. Flag it clearly (not a generic error)
                 # and offer to re-onboard.
-                st.error(f"⚠️ **{broker}'s statement format changed.**  The saved parser "
+                st.error(f"**{broker}'s statement format changed.**  The saved parser "
                          f"can no longer read it — {drift.summary()}")
                 _drift_detail(spec, path, uploaded.name)
-                if st.button(f"🔁 Re-onboard {broker} (propose an updated parser)",
+                if st.button(f"Re-onboard {broker} (propose an updated parser)",
                              key=f"btn::{reonb_key}", type="primary"):
                     st.session_state[reonb_key] = True
                 if st.session_state.get(reonb_key):
@@ -750,13 +816,13 @@ with single_tab:
             else:
                 marks = run_spec(spec, path)
                 if drift.missing_optional:
-                    st.warning(f"⚠️ **{broker}'s format may have changed.**  Parsed OK, but "
+                    st.warning(f"**{broker}'s format may have changed.**  Parsed OK, but "
                                f"optional column(s) no longer found: "
                                f"**{', '.join(drift.missing_optional)}** — those values will "
                                "be blank until the parser is updated.")
                     _drift_detail(spec, path, uploaded.name)
                 else:
-                    st.success(f"✅ Identified as **{broker}** — format verified against the "
+                    st.success(f"Identified as **{broker}** — format verified against the "
                                "saved spec.")
                 warns = _warnings_for_marks(marks)
                 n_flag = sum(1 for w in warns if w)
@@ -770,7 +836,7 @@ with single_tab:
                 _anomaly_panel(broker, [m.trade_ref for m in marks], warns)
 
                 if drift.missing_optional:
-                    if st.button(f"🔁 Re-onboard {broker} to capture the new layout",
+                    if st.button(f"Re-onboard {broker} to capture the new layout",
                                  key=f"btn::{reonb_key}"):
                         st.session_state[reonb_key] = True
                     if st.session_state.get(reonb_key):
@@ -788,7 +854,8 @@ with month_tab:
     # nothing matured. The statements all state their own valuation date.
     extra = st.file_uploader(
         "Drag broker statements here — or click to browse (multiple at once)",
-        type=["xls", "xlsx"], accept_multiple_files=True, key="month",
+        type=["xls", "xlsx"], accept_multiple_files=True,
+        key=f"month_{st.session_state.get('_upload_gen', 0)}",
         help="Drag one or more .xls/.xlsx files straight from your file explorer.",
     )
 
@@ -818,7 +885,7 @@ with month_tab:
     if detected:
         with note_col:
             if as_of == detected:
-                st.caption(f"✅ Dated from the statements: **{detected}**"
+                st.caption(f"Dated from the statements: **{detected}**"
                            f" ({len(stated_dates)} of {len(sources)} files state a date)")
             else:
                 st.error(f"**As-of mismatch** — you have **{as_of}** selected but the "
@@ -880,7 +947,7 @@ with month_tab:
         with st.expander(f"Files loaded ({len(loaded)})"):
             st.dataframe([{"Broker": broker, "Trades": n, "File": name}
                           for broker, n, name in loaded],
-                         use_container_width=True, hide_index=True)
+                         width="stretch", hide_index=True)
             if dupes:
                 st.warning("Skipped (broker already loaded): " + ", ".join(dupes))
             if errors:
@@ -890,7 +957,7 @@ with month_tab:
     # the re-onboard drafting (a model call) fires only when the user clicks and
     # renders inline right here, so tokens are never spent by surprise.
     if drifted_hard or drifted_soft:
-        st.subheader("⚠️ Format changes detected")
+        st.subheader("Format changes detected")
         st.caption("A known broker's statement layout changed vs the saved parser. "
                    "Review what moved, then re-onboard to update the parser if it's a "
                    "real change.")
@@ -901,7 +968,7 @@ with month_tab:
                      f"({rep.summary()}). **Excluded** from the totals below until re-onboarded.")
             _drift_detail(spec, path, display)
             key = f"reonb_month::{display}"
-            if st.button(f"🔁 Re-onboard {broker} (propose an updated parser)",
+            if st.button(f"Re-onboard {broker} (propose an updated parser)",
                          key=f"btn::{key}", type="primary"):
                 st.session_state[key] = True
             if st.session_state.get(key):
@@ -914,7 +981,7 @@ with month_tab:
                        "(those values are blank in the output).")
             _drift_detail(spec, path, display)
             key = f"reonb_month::{display}"
-            if st.button(f"🔁 Re-onboard {broker} to capture the new layout",
+            if st.button(f"Re-onboard {broker} to capture the new layout",
                          key=f"btn::{key}"):
                 st.session_state[key] = True
             if st.session_state.get(key):
@@ -927,7 +994,7 @@ with month_tab:
         onboard_area = st.container()
         with onboard_area:
             names = ", ".join(f"`{d}`" for d, _ in onboardables)
-            st.warning(f"⚠️ **Unknown format** — {names} → sending to the onboarding agent…")
+            st.warning(f"**Unknown format** — {names}. Drafting a parser for your review…")
 
     if not all_marks and not onboardables and not drifted_hard and not drifted_soft:
         st.info("**Drop broker statements above to build the combined sheet.**  "
@@ -940,17 +1007,17 @@ with month_tab:
         screen = screen_marks(all_marks, as_of)
         if screen.repeats or screen.matured or screen.unknown_maturity:
             cols = st.columns(3)
-            cols[0].metric("Repeat entries (dropped)", len(screen.repeats), border=True)
-            cols[1].metric("Matured (flagged, kept)", len(screen.matured), border=True)
-            cols[2].metric("Unknown maturity", len(screen.unknown_maturity), border=True)
+            cols[0].metric("Duplicates removed", len(screen.repeats), border=True)
+            cols[1].metric("Matured, kept for review", len(screen.matured), border=True)
+            cols[2].metric("Maturity not stated", len(screen.unknown_maturity), border=True)
             if screen.matured:
                 with st.expander(f"Matured entries — {len(screen.matured)} (past maturity as of {as_of})"):
                     st.dataframe([{"Broker": f.broker, "Trade Ref": f.trade_ref, "Detail": f.detail}
-                                  for f in screen.matured], use_container_width=True, hide_index=True)
+                                  for f in screen.matured], width="stretch", hide_index=True)
             if screen.repeats:
                 with st.expander(f"Repeat entries dropped — {len(screen.repeats)}"):
                     st.dataframe([{"Broker": f.broker, "Trade Ref": f.trade_ref}
-                                  for f in screen.repeats], use_container_width=True, hide_index=True)
+                                  for f in screen.repeats], width="stretch", hide_index=True)
         marks_for_output = screen.kept
 
         # Calls and puts each get the FULL sectioned treatment in their own
@@ -961,7 +1028,7 @@ with month_tab:
         call_marks, put_marks = split_marks_by_option_type(marks_for_output)
         exclusions = load_exclusions()
         calls_tab, puts_tab = st.tabs(
-            [f"📞 Call Options ({len(call_marks)})", f"📈 Put Options ({len(put_marks)})"])
+            [f"Call options ({len(call_marks)})", f"Put options ({len(put_marks)})"])
         with calls_tab:
             _render_option_sheet("Call", call_marks, as_of=as_of,
                                  exclusions=exclusions, primary=True)

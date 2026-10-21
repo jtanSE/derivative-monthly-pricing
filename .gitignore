@@ -30,5 +30,9 @@ data/*/
 # Per-machine, not source; regenerated on first use.
 data/usage_totals.json
 
+# Written by start-app.cmd when startup fails, so the message survives the
+# window closing. Per-machine diagnostic, not source.
+SETUP-PROBLEM.txt
+
 # Security write-ups are kept local, not published to the code remote.
 SECURITY-*.md
