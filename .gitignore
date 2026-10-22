@@ -36,3 +36,7 @@ SETUP-PROBLEM.txt
 
 # Security write-ups are kept local, not published to the code remote.
 SECURITY-*.md
+
+# Internal planning notes, kept local, not published to the code remote.
+originalpromptplan.md
+SYSTEMIMPLEMENTATION.md
